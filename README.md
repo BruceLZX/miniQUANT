@@ -2,17 +2,15 @@
 
 这是一个用于边学边造的量化交易项目，基于Python，包含基础的量化交易项目结构、示例策略、数据处理、回测框架等。
 
+## 快速部署（Windows & macOS）
+详见 [QUICK_START.md](./QUICK_START.md)
+
 ## 项目结构
 - `strategies/`：存放量化交易策略示例
 - `data/`：数据存储与处理
 - `backtest/`：回测框架与工具
 - `notebooks/`：学习与实验用Jupyter笔记本
 - `README.md`：项目说明
-
-## 快速开始
-1. 克隆或下载本项目
-2. 安装依赖（如有requirements.txt）
-3. 运行示例策略或回测脚本
 
 ## 适用人群
 - 量化交易初学者
