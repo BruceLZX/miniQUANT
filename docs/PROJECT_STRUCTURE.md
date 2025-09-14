@@ -14,6 +14,8 @@
 - 回测与评估：事件驱动或日频回测，绩效指标与报告。
 - 交易执行：券商/仿真/纸上交易接口，订单路由与成交回报。
 - 可视化 UI：Streamlit 网页端下单面板，行情/新闻/下单/持仓展示。
+- 可视化 UI（可选 Node）：Next.js 前端（TS），通过 FastAPI 后端提供的 `/api/*` 服务联通。前端唯一主动操作为“选定/更改股票”，其余均为只读监控。
+ - 模型监控：监控模型运行状态、最近决策/信号、下单动作、风控与绩效；提供后端 API 与前端面板。
 - 数据存储与缓存：本地 Parquet/SQLite 或外部数据库，统一读写。
 - 调度与管道：定时抓取/清洗/特征/训练/执行的一体化流水线。
 - 配置与密钥：环境变量与配置模板，避免泄露敏感信息。
@@ -27,8 +29,7 @@ MyQuant/
 ├─ README.md                    # 可选：总览/索引
 ├─ QUICK_START.md               # 快速开始（新增）
 ├─ .env.example                 # API Key 示例（请复制为 .env 并填写）
-├─ pyproject.toml or requirements.txt
-├─ requirements-ui.txt          # UI 运行依赖（已添加）
+├─ pyproject.toml or requirements.txt  # 统一依赖（包含后端与 Streamlit UI）
 ├─ notebooks/                   # 研究/实验 Notebook
 ├─ docs/
 │  └─ PROJECT_STRUCTURE.md      # 本文档
@@ -71,6 +72,12 @@ MyQuant/
 │     │  ├─ engine.py              # 回测引擎（事件/日频）
 │     │  ├─ metrics.py             # 收益/波动/回撤/IC 等
 │     │  └─ reports.py             # 可视化/报告
+│     ├─ model/
+│     │  ├─ __init__.py
+│     │  ├─ runner.py              # 模型运行入口（轮询/事件驱动）
+│     │  ├─ monitor.py             # 采集运行状态、汇总指标
+│     │  ├─ schemas.py             # 状态/事件/信号的数据模型
+│     │  └─ events.py              # 事件记录与持久化（JSONL/NDJSON）
 │     ├─ execution/
 │     │  ├─ broker_base.py         # 券商/交易接口抽象
 │     │  ├─ paper_broker.py        # 纸上交易/仿真（已添加，文件持久化）
@@ -79,6 +86,8 @@ MyQuant/
 │     ├─ ui/
 │     │  ├─ __init__.py
 │     │  └─ streamlit_app.py       # 可视化下单面板（已添加）
+│     ├─ api/
+│     │  └─ server.py              # FastAPI 后端（Node 前端方案所需）
 │     ├─ cli/
 │     │  ├─ main.py                # 命令行入口（ingest/backtest/live）
 │     │  └─ jobs/
@@ -90,10 +99,41 @@ MyQuant/
 │        ├─ time.py                # 交易日/时区
 │        └─ cache.py               # 简单缓存/速率限制
 └─ tests/                          # 单元/集成测试
+
+（Node 前端可选结构）
+web/
+├─ package.json                    # 包含 `dev:all` 并发启动脚本（前后端）
+├─ next.config.js                  # `/api/*` 代理至后端 FastAPI
+├─ app/ 或 pages/                  # 页面路由
+├─ components/                     # Chart/ModelMonitor/News 等
+└─ lib/api.ts                      # API 客户端（可用 React Query）
+
+根目录
+├─ .gitignore                      # 忽略 venv、node_modules、.next、数据与日志等
 ```
- 
+
 ---
- 
+
+## 已实现组件（快速索引）
+
+- 后端 API：`src/myquant/api/server.py`（健康检查/行情/账户与订单/模型监控）
+- 纸上交易：`src/myquant/execution/paper_broker.py`（文件持久化）
+- 模型监控：
+  - `src/myquant/model/schemas.py`（结构）
+  - `src/myquant/model/events.py`（事件读写，`logs/model/events.jsonl`）
+  - `src/myquant/model/monitor.py`（状态聚合）
+  - `src/myquant/model/demo_events.py`（示例事件生成器）
+- 前端（Node）：
+  - 页面：`web/pages/index.tsx`（选股 + 价格监控 + Model Monitor）
+  - API 客户端：`web/lib/api.ts`
+  - 启动与代理：`web/package.json`, `web/next.config.js`
+
+## 下一步（短期）
+
+- 前端：加入只读 K 线图与账户摘要卡片
+- 数据：实现 `data/market` Provider 抽象 + `yfinance_provider` + 缓存
+- 前端 UX：完善错误/空态与加载提示
+
 ## 3) 数据流与处理步骤（高层）
  
 1. 市场数据抓取：按日/分钟频率拉取行情与基础数据，落地存储。
@@ -162,7 +202,7 @@ class Broker:
 ## 7) 网页 UI 说明（已落地）
 
 - 路径：`src/myquant/ui/streamlit_app.py`
-- 依赖：`requirements-ui.txt`（`streamlit`, `plotly`, `pandas`, `numpy`, `yfinance`）
+- 依赖：统一在 `requirements.txt` 中（`streamlit`, `plotly`, `pandas`, `numpy`, `yfinance` 等）
 - 功能：
   - 股票选择、日期与频率切换，K 线展示
   - 新闻与情绪占位读取：`data/news/news_sample.csv`
@@ -218,7 +258,7 @@ class Broker:
   - 数据存储：`data/`；新闻样例：`data/news/news_sample.csv`
   - 纸上交易状态：`data/paper_trading_state.json`（删除可重置）
 - 环境：复制 `.env.example` 为 `.env` 并填充必要 Key。
-- 依赖：`pip install -r requirements-ui.txt`（或统一 `requirements.txt`/`pyproject.toml`）
+- 依赖：`pip install -r requirements.txt`（或按需使用 `pyproject.toml`）
 
 ---
 
@@ -226,3 +266,10 @@ class Broker:
 - 初始化 `data/market/provider_base.py` 与一个 Provider 骨架
 - 加入 `.env.example` 模板字段与 `config/settings.py` 最小实现
 - 搭建 `ingestion/scheduler.py` 与 `pipelines.py` 的最小可运行版本
+数据与日志（建议）
+- `logs/model/events.jsonl`：模型事件（决策、下单、风险、异常）按行记录，便于追溯。
+- `data/cache/`：行情缓存；`data/news/`：新闻与情绪。
+
+后端新增 API（模型监控，计划中）
+- `GET /api/model/status`：当前状态（idle/running/error、last_run、watch_symbol、latency 等）
+- `GET /api/model/events?limit=100`：最近事件列表（决策/下单/风险/异常），来源于 JSONL 或内存缓冲。

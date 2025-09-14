@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+*.egg-info/
+dist/
+build/
+
+# Data & logs
+data/paper_trading_state.json
+data/cache/
+logs/
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/.cache/
+web/.eslintcache
+web/.swc/
+web/.turbo/
+web/.vercel/
+web/npm-debug.log*
+web/yarn-error.log*
+web/package-lock.json
+web/pnpm-lock.yaml
+web/yarn.lock
+web/.env*
+
+# General Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+
+# IDE
+.vscode/
+.idea/
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+notebooks/.ipynb_checkpoints/
