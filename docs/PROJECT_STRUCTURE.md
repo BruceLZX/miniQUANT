@@ -13,19 +13,22 @@
 - 策略与信号：因子组合、打分与下单信号生成，含风控与仓位控制。
 - 回测与评估：事件驱动或日频回测，绩效指标与报告。
 - 交易执行：券商/仿真/纸上交易接口，订单路由与成交回报。
+- 可视化 UI：Streamlit 网页端下单面板，行情/新闻/下单/持仓展示。
 - 数据存储与缓存：本地 Parquet/SQLite 或外部数据库，统一读写。
 - 调度与管道：定时抓取/清洗/特征/训练/执行的一体化流水线。
 - 配置与密钥：环境变量与配置模板，避免泄露敏感信息。
  
 ---
  
-## 2) 建议目录结构
+## 2) 建议目录结构（含已实现部分）
  
 ```text
 MyQuant/
-├─ README.md
+├─ README.md                    # 可选：总览/索引
+├─ QUICK_START.md               # 快速开始（新增）
 ├─ .env.example                 # API Key 示例（请复制为 .env 并填写）
 ├─ pyproject.toml or requirements.txt
+├─ requirements-ui.txt          # UI 运行依赖（已添加）
 ├─ notebooks/                   # 研究/实验 Notebook
 ├─ docs/
 │  └─ PROJECT_STRUCTURE.md      # 本文档
@@ -70,9 +73,12 @@ MyQuant/
 │     │  └─ reports.py             # 可视化/报告
 │     ├─ execution/
 │     │  ├─ broker_base.py         # 券商/交易接口抽象
-│     │  ├─ paper_broker.py        # 纸上交易/仿真
+│     │  ├─ paper_broker.py        # 纸上交易/仿真（已添加，文件持久化）
 │     │  ├─ order_router.py        # 订单路由与撮合适配
 │     │  └─ risk.py                # 风控与仓位管理
+│     ├─ ui/
+│     │  ├─ __init__.py
+│     │  └─ streamlit_app.py       # 可视化下单面板（已添加）
 │     ├─ cli/
 │     │  ├─ main.py                # 命令行入口（ingest/backtest/live）
 │     │  └─ jobs/
@@ -105,9 +111,9 @@ MyQuant/
                 ├─> [Storage] ─> [Features] ─> [Strategy] ─> [Backtest/Live]
 [News/Crawler] ─┘             └> [AI Sentiment/Topics] ─┘
 ```
- 
+
 ---
- 
+
 ## 4) 接口抽象（建议最小集合）
  
 ```python
@@ -142,30 +148,81 @@ class Broker:
 - `.env.example`：提供所需的环境变量模板（如数据源 Token、AI Key、券商 Key）。
 - `src/myquant/config/settings.py`：集中加载 `.env`/YAML 并暴露配置对象。
 - 运行时通过环境变量覆盖，避免在代码中硬编码敏感信息。
- 
+
 ---
- 
+
 ## 6) 爬虫与合规注意
  
 - 遵守网站 `robots.txt` 与服务条款；仅抓取允许的公开信息。
 - 加入速率限制、重试与指纹隔离；保留抓取日志与来源字段。
 - 尽量优先 RSS、官方公告渠道，减少对目标站点压力与合规风险。
- 
----
- 
-## 7) 初期落地建议（按优先级）
- 
-1. 选定编程语言与运行环境（默认 Python 3.10+）。
-2. 确认数据源（如 TuShare/AkShare/YFinance 等）与最小行情字段集。
-3. 选择 2–3 个稳定新闻源（优先 RSS/公告），做清洗+时间对齐。
-4. 接一个 AI 客户端（本地或云端）用于摘要/情感，形成首个“新闻因子”。
-5. 用简单动量因子 + 新闻情感因子做日频策略，跑通回测链路。
-6. 接入纸上交易接口，形成端到端最小可用闭环。
- 
----
- 
-如需，我可以基于该结构帮你：
-- 初始化 `src/` 代码骨架与占位类
-- 提供最小的 `cli` 命令（抓数据/跑回测/跑实时）
-- 加入 `.env.example` 与基础配置读取
 
+---
+
+## 7) 网页 UI 说明（已落地）
+
+- 路径：`src/myquant/ui/streamlit_app.py`
+- 依赖：`requirements-ui.txt`（`streamlit`, `plotly`, `pandas`, `numpy`, `yfinance`）
+- 功能：
+  - 股票选择、日期与频率切换，K 线展示
+  - 新闻与情绪占位读取：`data/news/news_sample.csv`
+  - 下单表单（买/卖、市价/限价），成交回写到 `data/paper_trading_state.json`
+  - 持仓与订单列表展示
+- 运行：`streamlit run src/myquant/ui/streamlit_app.py`
+
+---
+
+## 8) 项目实施路线图（细化与优先级）
+
+阶段 A：最小闭环（已进行/优先完成）
+- A1 UI：Streamlit 下单面板与行情可视化（已添加，继续完善折线/K线指标）
+- A2 执行：`PaperBroker` 文件持久化、基础风控参数（单票/总仓上限）
+- A3 数据：临时使用 `yfinance` 或本地演示数据，保证 UI 可用
+
+阶段 B：数据与管道
+- B1 市场数据：实现 `data/market/provider_base.py` 与一个真实 Provider（如 AkShare/TuShare/YFinance）
+- B2 存储：`data/storage.py` 统一 Parquet/SQLite 读写，缓存日线/分钟线
+- B3 调度：`data/ingestion/scheduler.py` 使用 APScheduler 定时抓取与清洗
+
+阶段 C：新闻与 AI
+- C1 爬虫：`data/news/crawler/rss_crawler.py` 优先 RSS；`web_crawler.py` 次之
+- C2 清洗：`parser/clean.py`、`parser/dedupe.py` 去噪/抽取/去重
+- C3 AI：`sentiment/ai_client_base.py` + `openai_client.py`；`sentiment_pipeline.py` 产生摘要/情绪/主题
+- C4 融合：`features/fusion.py` 将新闻因子与行情因子时间对齐
+
+阶段 D：策略与回测
+- D1 因子：`features/factors.py` 动量/波动/价值等基础因子
+- D2 策略：`strategy/example_mom_news.py` 动量 + 新闻情绪示例策略
+- D3 回测：`backtest/engine.py` 与 `metrics.py`，生成绩效与报告
+
+阶段 E：交易与风控强化
+- E1 订单：`execution/order_router.py` 支持更多订单类型与撮合模拟
+- E2 风控：`execution/risk.py` 规则化风控（单票/行业/整体杠杆）
+- E3 券商：对接第三方仿真或实盘 API（按需）
+
+阶段 F：工程化与可运维
+- F1 CLI：`cli/main.py` 提供 `ingest/backtest/live` 子命令
+- F2 日志：统一日志与追踪，`logs/` 结构标准化
+- F3 配置：`.env` + `config/settings.py` 支持多环境
+- F4 测试：为 `broker`, `features`, `backtest` 核心模块补单测
+- F5 部署：Dockerfile/Compose（可选），本地/云端运行
+
+每阶段的完成定义（DoD）建议写入 `QUICK_START.md` 或 `README.md`，便于跨工作区协作。
+
+---
+
+## 9) 跨工作区协作提示
+
+- 固定入口：
+  - 网页 UI：`streamlit run src/myquant/ui/streamlit_app.py`
+  - 数据存储：`data/`；新闻样例：`data/news/news_sample.csv`
+  - 纸上交易状态：`data/paper_trading_state.json`（删除可重置）
+- 环境：复制 `.env.example` 为 `.env` 并填充必要 Key。
+- 依赖：`pip install -r requirements-ui.txt`（或统一 `requirements.txt`/`pyproject.toml`）
+
+---
+
+如需，我可以：
+- 初始化 `data/market/provider_base.py` 与一个 Provider 骨架
+- 加入 `.env.example` 模板字段与 `config/settings.py` 最小实现
+- 搭建 `ingestion/scheduler.py` 与 `pipelines.py` 的最小可运行版本
