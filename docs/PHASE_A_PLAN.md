@@ -4,19 +4,26 @@
 
 ---
 
-## 进度快照（Phase A）
+## Phase A 路线图（A1→A5，已按顺序整理）
 
-- [x] A1N-1 FastAPI 基础与 `/api/health`
-- [x] A1N-2 市场/账户/下单核心路由（bars/last/account/positions/orders）
-- [x] A2N-1 Next.js 前端脚手架 + API 客户端 + 仅“选定/更改股票”的价格监控页
-- [x] A3N-1 一体化启动与代理（`dev:all`，python3 + PYTHONPATH 修正）
-- [x] A4-1 模型监控后端：schemas/events/monitor + API（`/api/model/status`, `/api/model/events`）
-- [x] A4-2 前端 Model Monitor 面板 + 8s 轮询
-- [x] A4-5 Demo 事件生成器（`python3 -m myquant.model.demo_events`）
-- [ ] A2N-2 前端增强：只读 K 线图 + 账户摘要卡片
-- [ ] A3-2 数据 Provider 抽象 + `yfinance_provider` + Parquet+TTL 缓存
-- [ ] A3N-2 前端 UX 打磨：错误/空态/加载提示
-- [ ] F1/F2 工程化补充：CLI/日志规范化（可选）
+- A1 后端基础（已完成）
+  - FastAPI 应用、CORS、健康检查；市场/账户/订单核心路由。
+  - 代码：`src/myquant/api/server.py`（bars/last/account/positions/orders/health）。
+- A2 前端基础（已完成）
+  - Next.js 仪表盘：唯一主动操作为“选定/更改股票”；价格只读监控。
+  - 代码：`web/pages/index.tsx`、`web/lib/api.ts`。
+- A3 一体化与开发体验（已完成）
+  - `dev:all` 并发启动、代理与路径修正、.gitignore、Quick Start 文档。
+  - 代码：`web/package.json`、`web/next.config.js`、`QUICK_START.md`、`.gitignore`。
+- A4 模型监控通道（已完成）
+  - 后端：schemas/events/monitor + API（`/api/model/status`, `/api/model/events`）。
+  - 前端：Model Monitor 面板 + 8s 轮询；Demo 事件生成器。
+  - 代码：`src/myquant/model/*`、`web/pages/index.tsx`。
+- A5 账户与模型控制（进行中 / 下一步）
+  - A5.1 账户摘要：本金、总收益率、年化收益率、周收益率（前端卡片 + 后端简化计算）。
+  - A5.2 模型操作范围：Universe 盒子（搜索+ADD/移除）与“禁买”开关（后端持久化 + 风控校验）。
+
+当前状态小结：A1–A4 已完成可用；A5 待实现（优先账户摘要，其次 Universe/禁买）。
 
 ## A 的范围与交付
 
@@ -194,9 +201,50 @@
 - 账户：`GET /api/account`、`GET /api/positions`、`GET /api/orders`
 - 下单：`POST /api/orders`
   - Body: `{ symbol, side: "BUY"|"SELL", qty: number, type: "MARKET"|"LIMIT", price?: number }`
-  - Resp: `{ id, ts, status, fill_price, ... }`
+ - Resp: `{ id, ts, status, fill_price, ... }`
 
 备注：Phase A 的行情可由 yfinance 或演示数据驱动；账户字段可先精简，A2 再补齐。
+
+---
+
+## 补充：账户收益指标与模型控制（新增需求对齐）
+
+一、账户收益指标（A2 扩展）
+- 指标定义：
+  - 本金 `principal`（默认通过环境变量配置，示例 `BROKER_PRINCIPAL=1_000_000`）。
+  - 总收益/收益率：`total_return = equity - principal`；`total_return_pct = total_return / principal`。
+  - 年化收益率：基于每日净值序列年化（按 252 交易日）或按起止日期换算（简化实现择一）。
+  - 周收益率：`equity[t] / equity[t-7d] - 1`（需要记录每日净值）。
+- 数据落地：
+  - 每日收盘/定时将 `equity` 追加到 `logs/account/equity.csv`（date,equity）。
+- 前端展示：
+  - 账户摘要卡片：本金/年化/总收益率/周收益率（只读）。
+
+二、模型控制与操作范围（A5 新增）
+- 前端盒子：
+  - Positions Box：只读展示持仓。
+  - Operated Stocks（Universe Box）：展示“模型可操作的股票”，搜索框 + ADD 加入，支持移除。
+  - 禁买开关：对某股票切换“禁止买入”，模型只能卖出、不可买入。
+- 后端与持久化：
+  - `data/model/universe.json`：`{"symbols": ["AAPL", ...]}`。
+  - `data/model/controls.json`：`{"no_buy": ["TSLA", ...]}`。
+- API 设计：
+  - `GET /api/model/universe` → `{ symbols: string[] }`
+  - `POST /api/model/universe` → `{ symbol }`（加入）
+  - `DELETE /api/model/universe` → `{ symbol }`（移除）
+  - `GET /api/model/controls` → `{ no_buy: string[] }`
+  - `POST /api/model/controls/no_buy` → `{ symbol }`（添加禁买）
+  - `DELETE /api/model/controls/no_buy` → `{ symbol }`（移除禁买）
+  - 风控校验：BUY 请求若命中 `no_buy` 列表则拒绝。
+- DoD：
+  - 前端可管理 Universe；禁买开关生效并持久化；
+  - 模型（或 demo）发出的 BUY 在禁买时被拒绝；
+  - 刷新后状态一致、文件被 .gitignore 忽略。
+
+三、进度快照补充
+- [ ] A2N-2 增强账户摘要卡片（本金/年化/总收益率/周收益率）
+- [ ] A5-1 Universe 与禁买控制的后端与持久化
+- [ ] A5-2 前端 Operated Stocks 盒子（搜索 + ADD、禁买开关、移除）
 
 ## 阶段A（Node 变体）任务拆解与 DoD（更新：前端仅做“选定/更改股票”，其他模块只读监控）
 
