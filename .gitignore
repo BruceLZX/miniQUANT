@@ -7,6 +7,7 @@ __pycache__/
 .venv/
 .env
 .env.*
+!**/.env.example
 *.egg-info/
 dist/
 build/
@@ -15,6 +16,18 @@ build/
 data/paper_trading_state.json
 data/cache/
 logs/
+.run/
+
+# MyQuant session runtime artifacts
+session_*/code_workspace/backend/.runtime_state.json
+session_*/code_workspace/backend/.runtime_config.json
+session_*/code_workspace/backend/.env
+session_*/code_workspace/backend/.venv/
+session_*/code_workspace/backend/venv/
+session_*/code_workspace/backend/logs/
+session_*/code_workspace/backend/__pycache__/
+session_*/code_workspace/backend/**/*.pyc
+session_*/code_workspace/attachments/
 
 # Node / Next.js
 web/node_modules/

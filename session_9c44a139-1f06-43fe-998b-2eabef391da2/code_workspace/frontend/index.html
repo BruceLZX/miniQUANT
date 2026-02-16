@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyQuant API 配置</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --card: #ffffff;
+        --text: #1f2937;
+        --subtext: #6b7280;
+        --primary: #0f766e;
+        --primary-hover: #115e59;
+        --border: #d1d5db;
+        --ok: #166534;
+        --err: #991b1b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, #e6fffb 0%, var(--bg) 45%);
+        color: var(--text);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .card {
+        width: min(680px, 100%);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 10px 30px rgba(15, 118, 110, 0.08);
+      }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      p { margin: 0 0 20px; color: var(--subtext); }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      label { font-size: 14px; font-weight: 600; }
+      input, select {
+        width: 100%;
+        margin-top: 6px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: end;
+        margin-top: 16px;
+      }
+      button {
+        border: none;
+        border-radius: 10px;
+        padding: 11px 16px;
+        background: var(--primary);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover { background: var(--primary-hover); }
+      #msg { margin-top: 14px; font-size: 14px; min-height: 20px; }
+      .ok { color: var(--ok); }
+      .err { color: var(--err); }
+      .hint { margin-top: 8px; font-size: 12px; color: var(--subtext); }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>MyQuant API 配置</h1>
+      <p>只需填写你已有的 API Key，点击提交即可写入后端运行配置。</p>
+
+      <div class="grid">
+        <label>后端地址
+          <input id="baseUrl" placeholder="http://127.0.0.1:8000" />
+        </label>
+        <label>OpenAI API Key
+          <input id="openai" type="password" placeholder="sk-..." />
+        </label>
+        <label>Kimi API Key
+          <input id="kimi" type="password" placeholder="sk-..." />
+        </label>
+        <label>GLM5 API Key
+          <input id="glm5" type="password" placeholder="..." />
+        </label>
+        <label>DeepSeek API Key
+          <input id="deepseek" type="password" placeholder="sk-..." />
+        </label>
+        <label>分析者模型 1
+          <select id="analystModel1">
+            <option value="kimi">Kimi</option>
+            <option value="openai">OpenAI(ChatGPT)</option>
+            <option value="glm5">GLM5</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+        </label>
+        <label>分析者模型 1 ID
+          <input id="analystModelName1" placeholder="moonshot-v1-8k" />
+        </label>
+        <label>分析者模型 2
+          <select id="analystModel2">
+            <option value="openai">OpenAI(ChatGPT)</option>
+            <option value="kimi">Kimi</option>
+            <option value="glm5">GLM5</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+        </label>
+        <label>分析者模型 2 ID
+          <input id="analystModelName2" placeholder="gpt-4o-mini" />
+        </label>
+        <label>分析者模型 3
+          <select id="analystModel3">
+            <option value="glm5">GLM5</option>
+            <option value="openai">OpenAI(ChatGPT)</option>
+            <option value="kimi">Kimi</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+        </label>
+        <label>分析者模型 3 ID
+          <input id="analystModelName3" placeholder="glm-4-plus" />
+        </label>
+        <label>批评者模型
+          <select id="criticModel">
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai">OpenAI(ChatGPT)</option>
+            <option value="kimi">Kimi</option>
+            <option value="glm5">GLM5</option>
+          </select>
+        </label>
+        <label>批评者模型 ID
+          <input id="criticModelName" placeholder="deepseek-chat" />
+        </label>
+        <label>拍板者模型
+          <select id="deciderModel">
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai">OpenAI(ChatGPT)</option>
+            <option value="kimi">Kimi</option>
+            <option value="glm5">GLM5</option>
+          </select>
+        </label>
+        <label>拍板者模型 ID
+          <input id="deciderModelName" placeholder="deepseek-chat" />
+        </label>
+      </div>
+
+      <div class="row">
+        <span class="hint">留空的字段不会提交。</span>
+        <button id="submitBtn">提交配置</button>
+      </div>
+      <div id="msg"></div>
+    </main>
+
+    <script>
+      const defaults = {
+        baseUrl: localStorage.getItem("myquant.baseUrl") || "http://127.0.0.1:8000",
+        openai: localStorage.getItem("myquant.openai") || "",
+        kimi: localStorage.getItem("myquant.kimi") || "",
+        glm5: localStorage.getItem("myquant.glm5") || "",
+        deepseek: localStorage.getItem("myquant.deepseek") || "",
+        analystModel1: localStorage.getItem("myquant.analystModel1") || "kimi",
+        analystModel2: localStorage.getItem("myquant.analystModel2") || "openai",
+        analystModel3: localStorage.getItem("myquant.analystModel3") || "glm5",
+        criticModel: localStorage.getItem("myquant.criticModel") || "deepseek",
+        deciderModel: localStorage.getItem("myquant.deciderModel") || "deepseek",
+        analystModelName1: localStorage.getItem("myquant.analystModelName1") || "moonshot-v1-8k",
+        analystModelName2: localStorage.getItem("myquant.analystModelName2") || "gpt-4o-mini",
+        analystModelName3: localStorage.getItem("myquant.analystModelName3") || "glm-4-plus",
+        criticModelName: localStorage.getItem("myquant.criticModelName") || "deepseek-chat",
+        deciderModelName: localStorage.getItem("myquant.deciderModelName") || "deepseek-chat",
+      };
+
+      for (const [k, v] of Object.entries(defaults)) {
+        const el = document.getElementById(k);
+        if (el) el.value = v;
+      }
+
+      const msg = document.getElementById("msg");
+      const submitBtn = document.getElementById("submitBtn");
+
+      function setMsg(text, type) {
+        msg.textContent = text;
+        msg.className = type;
+      }
+
+      submitBtn.addEventListener("click", async () => {
+        const baseUrl = document.getElementById("baseUrl").value.trim().replace(/\/$/, "");
+        const api_keys = {};
+        const fields = [
+          ["OPENAI_API_KEY", "openai"],
+          ["KIMI_API_KEY", "kimi"],
+          ["GLM5_API_KEY", "glm5"],
+          ["DEEPSEEK_API_KEY", "deepseek"],
+        ];
+
+        for (const [key, id] of fields) {
+          const value = document.getElementById(id).value.trim();
+          if (value) api_keys[key] = value;
+        }
+
+        if (!baseUrl) {
+          setMsg("请先填写后端地址。", "err");
+          return;
+        }
+
+        localStorage.setItem("myquant.baseUrl", baseUrl);
+        for (const [, id] of fields) {
+          localStorage.setItem(`myquant.${id}`, document.getElementById(id).value.trim());
+        }
+        localStorage.setItem("myquant.analystModel1", document.getElementById("analystModel1").value);
+        localStorage.setItem("myquant.analystModel2", document.getElementById("analystModel2").value);
+        localStorage.setItem("myquant.analystModel3", document.getElementById("analystModel3").value);
+        localStorage.setItem("myquant.criticModel", document.getElementById("criticModel").value);
+        localStorage.setItem("myquant.deciderModel", document.getElementById("deciderModel").value);
+        localStorage.setItem("myquant.analystModelName1", document.getElementById("analystModelName1").value.trim());
+        localStorage.setItem("myquant.analystModelName2", document.getElementById("analystModelName2").value.trim());
+        localStorage.setItem("myquant.analystModelName3", document.getElementById("analystModelName3").value.trim());
+        localStorage.setItem("myquant.criticModelName", document.getElementById("criticModelName").value.trim());
+        localStorage.setItem("myquant.deciderModelName", document.getElementById("deciderModelName").value.trim());
+
+        if (Object.keys(api_keys).length === 0) {
+          setMsg("请至少填写 1 个 API Key。", "err");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        setMsg("提交中...", "");
+
+        try {
+          const health = await fetch(`${baseUrl}/health`);
+          if (!health.ok) {
+            throw new Error(`后端健康检查失败: HTTP ${health.status}`);
+          }
+
+          const model_settings = {
+            analyst_models: [
+              document.getElementById("analystModel1").value,
+              document.getElementById("analystModel2").value,
+              document.getElementById("analystModel3").value,
+            ],
+            analyst_model_names: [
+              document.getElementById("analystModelName1").value.trim(),
+              document.getElementById("analystModelName2").value.trim(),
+              document.getElementById("analystModelName3").value.trim(),
+            ],
+            critic_model: document.getElementById("criticModel").value,
+            critic_model_name: document.getElementById("criticModelName").value.trim(),
+            decider_model: document.getElementById("deciderModel").value,
+            decider_model_name: document.getElementById("deciderModelName").value.trim(),
+          };
+
+          const res = await fetch(`${baseUrl}/api/config/update`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ api_keys, model_settings }),
+          });
+
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`HTTP ${res.status}: ${errText}`);
+          }
+
+          setMsg("提交成功，后端配置已更新。1 秒后进入交易平台。", "ok");
+          setTimeout(() => {
+            window.location.href = "./platform.html";
+          }, 1000);
+        } catch (e) {
+          const reason = e && e.message ? e.message : String(e);
+          if (reason.includes("Failed to fetch")) {
+            setMsg(`提交失败：无法连接后端 ${baseUrl}，请先确认后端已启动。`, "err");
+          } else {
+            setMsg(`提交失败：${reason}`, "err");
+          }
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

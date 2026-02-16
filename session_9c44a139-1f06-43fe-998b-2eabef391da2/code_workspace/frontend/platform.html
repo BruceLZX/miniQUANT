@@ -1,0 +1,1946 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyQuant Trading Console</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;600;700&display=swap");
+
+      :root {
+        --bg: #ecf3f8;
+        --ink: #11243d;
+        --muted: #5a6d86;
+        --card: #ffffff;
+        --line: #cfdcec;
+        --teal: #0a7b76;
+        --teal-soft: #d8f3ec;
+        --blue-soft: #e5efff;
+        --danger: #b4232f;
+        --warn: #b86c14;
+        --ok: #1f8a54;
+        --shadow: 0 20px 36px rgba(13, 31, 56, 0.09);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family: "Manrope", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(880px 520px at -14% -16%, #d8e8ff 0%, transparent 58%),
+          radial-gradient(780px 500px at 116% -12%, #c9f2e3 0%, transparent 58%),
+          linear-gradient(180deg, #f8fcff 0%, #ecf3f8 48%, #eaf1f6 100%);
+      }
+
+      .shell {
+        max-width: 1540px;
+        margin: 0 auto;
+        padding: 22px;
+      }
+
+      .hero {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 44px;
+        letter-spacing: 0.3px;
+      }
+
+      .brand p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .mode-badges {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .mode-badges span {
+        border: 1px solid var(--line);
+        background: #f4f8ff;
+        color: #2b4b74;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .msg {
+        margin: 12px 0 10px;
+        min-height: 26px;
+        border-radius: 10px;
+        padding: 6px 10px;
+        background: #f6fbff;
+        border: 1px dashed var(--line);
+        font-weight: 700;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+
+      .panel-hd {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        text-transform: uppercase;
+        color: #20426d;
+      }
+
+      .panel-bd {
+        padding: 12px;
+      }
+
+      .toolbar {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr repeat(5, auto);
+        gap: 8px;
+      }
+
+      .stats {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .decision-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .decision-card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(180deg, #ffffff, #f5fbff);
+        padding: 10px;
+      }
+
+      .decision-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-weight: 700;
+      }
+
+      .decision-meta {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: linear-gradient(180deg, #ffffff, #f5fbff);
+        padding: 10px 12px;
+      }
+
+      .stat .k {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .stat .v {
+        margin-top: 4px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 30px;
+        font-weight: 700;
+      }
+
+      .workspace {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 2.25fr 1fr;
+        gap: 12px;
+      }
+
+      .left-stack,
+      .right-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .d7-monitor {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 11px;
+        background: #f8fcff;
+      }
+
+      .d7-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .d7-bar {
+        margin-top: 8px;
+        height: 10px;
+        border-radius: 999px;
+        background: #e6eef8;
+        overflow: hidden;
+      }
+
+      .d7-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #0a7b76, #20b37f);
+      }
+
+      .reco-grid {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .reco-col {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fbfdff;
+        padding: 10px;
+      }
+
+      .reco-col h4 {
+        margin: 0 0 8px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 18px;
+      }
+
+      .reco-item {
+        margin-bottom: 8px;
+        border: 1px solid #d7e4f3;
+        border-radius: 10px;
+        padding: 8px;
+        background: #ffffff;
+      }
+
+      .reco-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        gap: 8px;
+      }
+
+      .cards {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px;
+        background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
+      }
+
+      .card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .symbol {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 34px;
+        font-weight: 700;
+      }
+
+      .badge {
+        color: #fff;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .b-long {
+        background: #1f8a54;
+      }
+
+      .b-short {
+        background: #b4232f;
+      }
+
+      .b-flat {
+        background: #176a9f;
+      }
+
+      .b-none {
+        background: #6a7685;
+      }
+
+      .kv {
+        margin-top: 8px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+
+      .kv div {
+        background: #f7fbff;
+        border: 1px solid #e2ebf5;
+        border-radius: 8px;
+        padding: 7px 8px;
+      }
+
+      .prog-item {
+        margin-top: 6px;
+      }
+
+      .prog-head {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .bar {
+        margin-top: 3px;
+        height: 7px;
+        border-radius: 999px;
+        background: #e6eef8;
+        overflow: hidden;
+      }
+
+      .fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #0a7b76, #20b37f);
+      }
+
+      .ops-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .ops-topline {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .strip {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #f8fcff;
+        padding: 10px;
+      }
+
+      .strip-title {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .chip.ok {
+        color: #145c39;
+        background: #daf5e7;
+      }
+
+      .chip.bad {
+        color: #842130;
+        background: #fce2e6;
+      }
+
+      .chip.info {
+        color: #234f84;
+        background: #e4efff;
+      }
+
+      .list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        max-height: 250px;
+        overflow: auto;
+      }
+
+      .list-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 8px;
+      }
+
+      .list-item .top {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .list-item .sub {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .positions-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .positions-table th,
+      .positions-table td {
+        border-bottom: 1px solid #e2ebf5;
+        padding: 8px 6px;
+        font-size: 12px;
+        text-align: left;
+      }
+
+      .positions-table th {
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .progress-matrix {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .matrix-row {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px;
+        background: #fff;
+      }
+
+      .matrix-row .head {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+
+      .mini-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .upload-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 140px;
+        gap: 8px;
+      }
+
+      .d4-shell {
+        border: 1px solid #d6e3f2;
+        border-radius: 12px;
+        background: linear-gradient(180deg, #f9fcff, #f3f8ff);
+        padding: 10px;
+      }
+
+      .d4-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .d4-help {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .d4-grid {
+        display: grid;
+        grid-template-columns: 1.25fr 0.95fr;
+        gap: 10px;
+      }
+
+      .d4-block {
+        border: 1px solid #dbe7f5;
+        border-radius: 10px;
+        padding: 8px;
+        background: #fff;
+      }
+
+      .d4-block h5 {
+        margin: 0 0 8px;
+        font-size: 12px;
+        letter-spacing: 0.15px;
+        text-transform: uppercase;
+        color: #325780;
+      }
+
+      .inline-tools {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .thumbs {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+        gap: 8px;
+      }
+
+      .thumb {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .thumb img {
+        display: block;
+        width: 100%;
+        height: 64px;
+        object-fit: cover;
+      }
+
+      .thumb button {
+        position: absolute;
+        right: 4px;
+        top: 4px;
+        border-radius: 999px;
+        padding: 2px 6px;
+        font-size: 11px;
+        background: rgba(0, 0, 0, 0.65);
+      }
+
+      .raw-dumps details {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px;
+        background: #f8fbff;
+      }
+
+      .raw-dumps summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: #264f82;
+      }
+
+      .raw-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .mt8 {
+        margin-top: 8px;
+      }
+
+      .mt12 {
+        margin-top: 12px;
+      }
+
+      .mt16 {
+        margin-top: 16px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .empty {
+        border: 1px dashed var(--line);
+        border-radius: 10px;
+        padding: 14px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .settings-shell details {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: linear-gradient(180deg, #ffffff, #f6fbff);
+      }
+
+      .settings-shell summary {
+        padding: 14px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 22px;
+        font-weight: 700;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .settings-shell summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .settings-shell summary::after {
+        content: "点击展开 / 收起";
+        float: right;
+        font-family: "Manrope", sans-serif;
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 8px;
+      }
+
+      .settings-shell details[open] summary::after {
+        content: "已展开";
+      }
+
+      .settings {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .switches {
+        grid-column: span 2;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .switch {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f7fbff;
+        padding: 9px 10px;
+      }
+
+      .switch label {
+        margin: 0;
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .switch input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--teal);
+      }
+
+      #savedKeys {
+        grid-column: span 2;
+        border: 1px dashed var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: #f8fbff;
+        word-break: break-all;
+      }
+
+      .validation-box {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fcff;
+        padding: 9px;
+      }
+
+      .check {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 7px 8px;
+        margin-top: 6px;
+        font-size: 13px;
+      }
+
+      .ok {
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+        color: var(--ok);
+      }
+
+      .warn {
+        border-color: #fed7aa;
+        background: #fff7ed;
+        color: var(--warn);
+      }
+
+      .err {
+        border-color: #fecaca;
+        background: #fef2f2;
+        color: var(--danger);
+      }
+
+      input,
+      select,
+      textarea,
+      button {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 14px;
+        font-family: "Manrope", sans-serif;
+      }
+
+      label {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      button {
+        width: auto;
+        border: none;
+        cursor: pointer;
+        color: #fff;
+        background: linear-gradient(180deg, #0f8a84, #0a7b76);
+      }
+
+      button:hover {
+        filter: brightness(1.04);
+      }
+
+      button.red {
+        background: linear-gradient(180deg, #c93d4b, #b4232f);
+      }
+
+      button.ghost {
+        background: linear-gradient(180deg, #44546b, #334155);
+      }
+
+      button[disabled] {
+        opacity: 0.62;
+        cursor: not-allowed;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      pre {
+        margin: 0;
+        max-height: 210px;
+        overflow: auto;
+        border-radius: 10px;
+        background: #0d1729;
+        color: #d5e5fb;
+        padding: 10px;
+        font-size: 12px;
+      }
+
+      @media (max-width: 1260px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 960px) {
+        .hero {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .toolbar {
+          grid-template-columns: 1fr;
+        }
+
+        .stats {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .reco-grid,
+        .decision-grid,
+        .cards,
+        .settings,
+        .switches,
+        .row,
+        .upload-grid,
+        .mini-grid,
+        .d4-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .switches,
+        #savedKeys {
+          grid-column: span 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div class="brand">
+          <h1>MyQuant Console</h1>
+          <p>实时交易决策台：D7 推荐、个股卡片、执行任务、风险与账户快照</p>
+        </div>
+        <div class="mode-badges">
+          <span>Manual D7</span>
+          <span>Per-Stock Progress</span>
+          <span>Model Validation</span>
+        </div>
+      </header>
+
+      <div class="msg" id="msg"></div>
+
+      <section class="panel">
+        <div class="panel-bd">
+          <div class="toolbar">
+            <input id="baseUrl" placeholder="后端地址，例如 http://127.0.0.1:8000" />
+            <button id="refreshBtn">刷新</button>
+            <button id="startBtn">启动系统</button>
+            <button id="stopBtn" class="red">停止系统</button>
+            <button id="runD7Btn">运行 D7</button>
+            <button id="runOnceBtn" class="ghost">跑一轮部门</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats" id="stats"></section>
+
+      <section class="panel mt12">
+        <div class="panel-hd">最终交易决定总览（可人工执行）</div>
+        <div class="panel-bd">
+          <div class="decision-grid" id="decisionBoard"></div>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <div class="left-stack">
+          <section class="panel">
+            <div class="panel-hd">D7 推荐池（短 / 中 / 长）</div>
+            <div class="panel-bd">
+              <div class="d7-monitor">
+                <div class="d7-row"><span id="d7Stage">D7 阶段: idle</span><span id="d7Percent">0%</span></div>
+                <div class="d7-bar"><div class="d7-fill" id="d7Fill"></div></div>
+                <div class="mt8 muted" id="d7Message">等待触发</div>
+                <div class="mt8 muted" id="d7Job">当前任务: -</div>
+              </div>
+              <div class="reco-grid" id="d7Recommendations"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-hd">交易池股票卡片</div>
+            <div class="panel-bd">
+              <div class="row">
+                <input id="stockSymbol" placeholder="手动输入股票代码，例如 AAPL" />
+                <button id="addStockBtn">手动添加</button>
+                <button id="removeStockBtn" class="red">移除股票</button>
+                <button id="refreshCardsBtn">刷新卡片</button>
+              </div>
+              <div class="cards" id="stockCards"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="right-stack">
+          <section class="panel">
+            <div class="panel-hd">Operations & Telemetry</div>
+            <div class="panel-bd ops-grid">
+              <div class="ops-topline">
+                <div class="muted" id="telemetryStamp">Telemetry: -</div>
+                <div class="chips" id="apiHealthBoard"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">系统状态摘要</div>
+                <div class="chips" id="systemChips"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">任务队列</div>
+                <div class="list" id="jobsBoard"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">交易历史（最新）</div>
+                <div class="list" id="historyBoard"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">账户与持仓快照</div>
+                <div id="snapshotBoard" class="muted">加载中...</div>
+                <div class="mt8" id="positionsBoard"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">部门进度（Global + D7）</div>
+                <div class="progress-matrix" id="progressBoard"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">个股部门进度</div>
+                <div class="list" id="stockProgressBoard"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">D4 材料上传（文本 + 图片粘贴）</div>
+                <div class="d4-shell">
+                  <div class="d4-head">
+                    <div class="d4-help">粘贴文本、拖入图片或填图片 URL。上传后将同步到 D4 共享队列。</div>
+                    <div class="muted" id="d4PasteHint">已缓存图片: 0</div>
+                  </div>
+                  <div class="upload-grid">
+                    <input id="d4StockSymbol" placeholder="股票代码，如 AAPL（空=全局同步）" />
+                    <input id="d4Summary" placeholder="材料摘要（例如：财报电话会要点）" />
+                    <input id="d4Reliability" type="number" min="0" max="1" step="0.05" value="0.8" style="width:110px;" />
+                  </div>
+                  <div class="mini-grid mt8">
+                    <label class="switch">
+                      <span>广播到全部 D4 部门</span>
+                      <input id="d4BroadcastAll" type="checkbox" checked />
+                    </label>
+                  </div>
+                  <div class="d4-grid mt8">
+                    <div class="d4-block">
+                      <h5>正文内容</h5>
+                      <textarea id="d4Content" placeholder="在这里粘贴文本；也可直接 Ctrl/Cmd+V 粘贴图片"></textarea>
+                    </div>
+                    <div class="d4-block">
+                      <h5>图片附件</h5>
+                      <textarea id="d4ImageUrls" placeholder="图片URL或data:image...，每行一个（可选）"></textarea>
+                      <input id="d4ImageFiles" class="mt8" type="file" accept="image/*" multiple />
+                      <div class="thumbs mt8" id="d4Thumbs"></div>
+                    </div>
+                  </div>
+                  <div class="inline-tools mt8">
+                    <button id="uploadD4Btn">提交到 D4 队列</button>
+                    <button id="clearD4MediaBtn" class="ghost">清空图片</button>
+                  </div>
+                </div>
+                <div class="mt8 list" id="d4QueueBoard"></div>
+              </div>
+
+              <div class="strip">
+                <div class="strip-title">D5 训练（在线校准）</div>
+                <div class="mt8"><button id="trainD5Btn">运行 D5 训练</button></div>
+                <div id="d5TrainBoard" class="mt8 muted">尚未训练</div>
+              </div>
+
+              <div class="raw-dumps">
+                <details>
+                  <summary>Raw API Dumps</summary>
+                  <div class="raw-grid">
+                    <pre id="systemStatus">加载中...</pre>
+                    <pre id="tradeHistory">加载中...</pre>
+                    <pre id="accountStatus">加载中...</pre>
+                    <pre id="positions">加载中...</pre>
+                    <pre id="globalProgress">加载中...</pre>
+                    <pre id="jobs">加载中...</pre>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section class="panel mt16 settings-shell">
+        <details id="settingsCollapse">
+          <summary>Settings + 实时可用性检测</summary>
+          <div class="panel-bd">
+            <div class="settings">
+              <label>OpenAI API Key<input id="openaiKey" type="password" /></label>
+              <label>Kimi API Key<input id="kimiKey" type="password" /></label>
+              <label>GLM5 API Key<input id="glm5Key" type="password" /></label>
+              <label>DeepSeek API Key<input id="deepseekKey" type="password" /></label>
+
+              <div class="switches">
+                <div class="switch">
+                  <label for="enableWebSearch">启用网页搜索能力</label>
+                  <input id="enableWebSearch" type="checkbox" checked />
+                </div>
+                <div class="switch">
+                  <label for="enableVision">启用图片读取能力</label>
+                  <input id="enableVision" type="checkbox" checked />
+                </div>
+              </div>
+
+              <div id="savedKeys" class="muted">已保存密钥: -</div>
+
+              <label>D1 运行间隔（分钟）<input id="intD1" type="number" min="5" step="5" value="60" /></label>
+              <label>D2 运行间隔（分钟）<input id="intD2" type="number" min="5" step="5" value="60" /></label>
+              <label>D3 运行间隔（分钟）<input id="intD3" type="number" min="5" step="5" value="60" /></label>
+              <label>D4 运行间隔（分钟）<input id="intD4" type="number" min="5" step="5" value="360" /></label>
+              <label>D6 运行间隔（分钟）<input id="intD6" type="number" min="5" step="5" value="30" /></label>
+              <label>D5 间隔（只读，本地量化高频）<input id="intD5Readonly" type="text" value="3 分钟（固定）" readonly /></label>
+
+              <label>分析者1 提供者
+                <select id="ap1"><option value="kimi">Kimi</option><option value="openai">OpenAI</option><option value="glm5">GLM5</option><option value="deepseek">DeepSeek</option></select>
+              </label>
+              <label>分析者1 模型ID<input id="am1" list="kimiModelOptions" placeholder="kimi-k2.5" /></label>
+
+              <label>分析者2 提供者
+                <select id="ap2"><option value="openai">OpenAI</option><option value="kimi">Kimi</option><option value="glm5">GLM5</option><option value="deepseek">DeepSeek</option></select>
+              </label>
+              <label>分析者2 模型ID<input id="am2" list="kimiModelOptions" placeholder="gpt-4o-mini" /></label>
+
+              <label>分析者3 提供者
+                <select id="ap3"><option value="glm5">GLM5</option><option value="openai">OpenAI</option><option value="kimi">Kimi</option><option value="deepseek">DeepSeek</option></select>
+              </label>
+              <label>分析者3 模型ID<input id="am3" list="kimiModelOptions" placeholder="glm-4-plus" /></label>
+
+              <label>批评者 提供者
+                <select id="cp"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option><option value="kimi">Kimi</option><option value="glm5">GLM5</option></select>
+              </label>
+              <label>批评者 模型ID<input id="cm" list="kimiModelOptions" placeholder="deepseek-chat" /></label>
+
+              <label>拍板者 提供者
+                <select id="dp"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option><option value="kimi">Kimi</option><option value="glm5">GLM5</option></select>
+              </label>
+              <label>拍板者 模型ID<input id="dm" list="kimiModelOptions" placeholder="deepseek-chat" /></label>
+            </div>
+
+            <datalist id="kimiModelOptions"></datalist>
+
+            <div class="mt12">
+              <button id="validateBtn">立即检测配置</button>
+              <button id="fetchKimiModelsBtn">拉取 Kimi 可用模型</button>
+              <button id="saveSettingsBtn" class="mt8">保存 Settings</button>
+            </div>
+
+            <div class="validation-box" id="validationBox">
+              <div class="muted">输入后会自动检测 provider + model 是否可调用。</div>
+              <div id="validationSummary" class="mt8 muted">尚未检测</div>
+              <div id="validationList"></div>
+            </div>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <script>
+      const el = {
+        msg: document.getElementById("msg"),
+        baseUrl: document.getElementById("baseUrl"),
+        stats: document.getElementById("stats"),
+        decisionBoard: document.getElementById("decisionBoard"),
+        systemChips: document.getElementById("systemChips"),
+        telemetryStamp: document.getElementById("telemetryStamp"),
+        apiHealthBoard: document.getElementById("apiHealthBoard"),
+        jobsBoard: document.getElementById("jobsBoard"),
+        historyBoard: document.getElementById("historyBoard"),
+        snapshotBoard: document.getElementById("snapshotBoard"),
+        positionsBoard: document.getElementById("positionsBoard"),
+        progressBoard: document.getElementById("progressBoard"),
+        stockProgressBoard: document.getElementById("stockProgressBoard"),
+        d4StockSymbol: document.getElementById("d4StockSymbol"),
+        d4Summary: document.getElementById("d4Summary"),
+        d4Reliability: document.getElementById("d4Reliability"),
+        d4BroadcastAll: document.getElementById("d4BroadcastAll"),
+        d4PasteHint: document.getElementById("d4PasteHint"),
+        d4Content: document.getElementById("d4Content"),
+        d4ImageUrls: document.getElementById("d4ImageUrls"),
+        d4ImageFiles: document.getElementById("d4ImageFiles"),
+        d4Thumbs: document.getElementById("d4Thumbs"),
+        d4QueueBoard: document.getElementById("d4QueueBoard"),
+        d5TrainBoard: document.getElementById("d5TrainBoard"),
+        d7Recommendations: document.getElementById("d7Recommendations"),
+        d7Stage: document.getElementById("d7Stage"),
+        d7Percent: document.getElementById("d7Percent"),
+        d7Fill: document.getElementById("d7Fill"),
+        d7Message: document.getElementById("d7Message"),
+        d7Job: document.getElementById("d7Job"),
+        stockCards: document.getElementById("stockCards"),
+        stockSymbol: document.getElementById("stockSymbol"),
+        tradeHistory: document.getElementById("tradeHistory"),
+        systemStatus: document.getElementById("systemStatus"),
+        globalProgress: document.getElementById("globalProgress"),
+        jobs: document.getElementById("jobs"),
+        accountStatus: document.getElementById("accountStatus"),
+        positions: document.getElementById("positions"),
+        openaiKey: document.getElementById("openaiKey"),
+        kimiKey: document.getElementById("kimiKey"),
+        glm5Key: document.getElementById("glm5Key"),
+        deepseekKey: document.getElementById("deepseekKey"),
+        enableWebSearch: document.getElementById("enableWebSearch"),
+        enableVision: document.getElementById("enableVision"),
+        savedKeys: document.getElementById("savedKeys"),
+        intD1: document.getElementById("intD1"),
+        intD2: document.getElementById("intD2"),
+        intD3: document.getElementById("intD3"),
+        intD4: document.getElementById("intD4"),
+        intD6: document.getElementById("intD6"),
+        intD5Readonly: document.getElementById("intD5Readonly"),
+        ap1: document.getElementById("ap1"), ap2: document.getElementById("ap2"), ap3: document.getElementById("ap3"),
+        am1: document.getElementById("am1"), am2: document.getElementById("am2"), am3: document.getElementById("am3"),
+        cp: document.getElementById("cp"), cm: document.getElementById("cm"),
+        dp: document.getElementById("dp"), dm: document.getElementById("dm"),
+        kimiModelOptions: document.getElementById("kimiModelOptions"),
+        validationSummary: document.getElementById("validationSummary"),
+        validationList: document.getElementById("validationList"),
+      };
+
+      const fmt = (obj) => JSON.stringify(obj, null, 2);
+      const num = (v) => (typeof v === "number" ? v.toFixed(2) : "-");
+      const compactNum = (v) => {
+        if (typeof v !== "number" || !Number.isFinite(v)) return "-";
+        const abs = Math.abs(v);
+        if (abs >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
+        if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+        if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+        return v.toFixed(2);
+      };
+      const getNow = () => new Date().toLocaleTimeString();
+      const ts = (raw) => {
+        if (!raw) return "-";
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return String(raw);
+        return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+      };
+      const countdown = (sec) => {
+        const s = Number(sec || 0);
+        if (!Number.isFinite(s) || s <= 0) return "现在可运行";
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const r = s % 60;
+        if (h > 0) return `${h}h ${m}m ${r}s`;
+        if (m > 0) return `${m}m ${r}s`;
+        return `${r}s`;
+      };
+
+      let validationTimer = null;
+
+      el.baseUrl.value = localStorage.getItem("myquant.baseUrl") || "http://127.0.0.1:8000";
+
+      function baseUrl() {
+        const v = el.baseUrl.value.trim().replace(/\/$/, "");
+        localStorage.setItem("myquant.baseUrl", v);
+        return v;
+      }
+
+      function setMsg(text, ok = false) {
+        el.msg.style.color = ok ? "#115d3a" : "#8c2230";
+        el.msg.textContent = text;
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch(baseUrl() + path, options);
+        if (!res.ok) {
+          let detail = "";
+          try {
+            const body = await res.json();
+            detail = body && (body.detail || body.message || "");
+          } catch {
+            // ignore json parse error
+          }
+          throw new Error(detail ? `${path} -> HTTP ${res.status}: ${detail}` : `${path} -> HTTP ${res.status}`);
+        }
+        return res.json();
+      }
+
+      async function post(path, body) {
+        return api(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      }
+
+      async function safeApi(path, fallback) {
+        try {
+          const data = await api(path);
+          return { ok: true, data, path };
+        } catch (e) {
+          return { ok: false, data: fallback, path, error: e.message || String(e) };
+        }
+      }
+
+      function getSettingsPayload() {
+        const norm = (raw) => {
+          let key = String(raw || "").trim().replace(/^['"]|['"]$/g, "");
+          if (key.toLowerCase().startsWith("bearer ")) key = key.slice(7).trim();
+          return key.replace(/\\r|\\n/g, "");
+        };
+        const looksMasked = (v) => {
+          const x = String(v || "").trim();
+          return !x || x.includes("...") || x.includes("•") || /^[*xX]+$/.test(x);
+        };
+        const api_keys = {};
+        if (!looksMasked(el.openaiKey.value)) api_keys.OPENAI_API_KEY = norm(el.openaiKey.value);
+        if (!looksMasked(el.kimiKey.value)) api_keys.KIMI_API_KEY = norm(el.kimiKey.value);
+        if (!looksMasked(el.glm5Key.value)) api_keys.GLM5_API_KEY = norm(el.glm5Key.value);
+        if (!looksMasked(el.deepseekKey.value)) api_keys.DEEPSEEK_API_KEY = norm(el.deepseekKey.value);
+
+        const toInt = (v, fallback) => {
+          const x = Number(v);
+          if (!Number.isFinite(x) || x <= 0) return fallback;
+          return Math.max(5, Math.round(x));
+        };
+        return {
+          api_keys,
+          intervals: {
+            d1: toInt(el.intD1.value, 60),
+            d2: toInt(el.intD2.value, 60),
+            d3: toInt(el.intD3.value, 60),
+            d4: toInt(el.intD4.value, 360),
+            d6: toInt(el.intD6.value, 30),
+          },
+          model_settings: {
+            analyst_models: [el.ap1.value, el.ap2.value, el.ap3.value],
+            analyst_model_names: [el.am1.value.trim(), el.am2.value.trim(), el.am3.value.trim()],
+            critic_model: el.cp.value,
+            critic_model_name: el.cm.value.trim(),
+            decider_model: el.dp.value,
+            decider_model_name: el.dm.value.trim(),
+            model_capabilities: {
+              enable_web_search: !!el.enableWebSearch.checked,
+              enable_vision: !!el.enableVision.checked,
+            },
+          }
+        };
+      }
+
+      function renderValidation(result) {
+        const checks = result && result.checks ? result.checks : [];
+        const summary = result
+          ? `检测时间 ${getNow()} | 通过 ${checks.filter(c => c.ok).length}/${checks.length} | 警告 ${result.warning_count} | 失败 ${result.fail_count}`
+          : "尚未检测";
+        el.validationSummary.textContent = summary;
+
+        el.validationList.innerHTML = checks.map(c => {
+          const cls = c.ok ? "ok" : (c.severity === "warning" ? "warn" : "err");
+          return `<div class="check ${cls}"><strong>${c.role}</strong> · ${c.provider} / ${c.model}<br>${c.message || (c.ok ? "OK" : "Failed")}</div>`;
+        }).join("") || `<div class="muted mt8">没有检测结果</div>`;
+      }
+
+      function renderSavedKeys(masked) {
+        const entries = Object.entries(masked || {});
+        if (!entries.length) {
+          el.savedKeys.textContent = "已保存密钥: -";
+          return;
+        }
+        el.savedKeys.textContent = "已保存密钥: " + entries.map(([k, v]) => `${k}(${v})`).join(" | ");
+      }
+
+      function renderKimiModelOptions(models) {
+        el.kimiModelOptions.innerHTML = (models || []).map(m => `<option value="${m}"></option>`).join("");
+      }
+
+      async function validateSettings() {
+        try {
+          const result = await post("/api/config/validate", getSettingsPayload());
+          renderValidation(result);
+          if (result.fail_count > 0) {
+            setMsg(`检测完成：存在 ${result.fail_count} 个失败项`, false);
+          } else if (result.warning_count > 0) {
+            setMsg(`检测完成：有 ${result.warning_count} 个警告`, false);
+          } else {
+            setMsg("检测完成：全部可调用", true);
+          }
+          return result;
+        } catch (e) {
+          setMsg(`检测失败：${e.message}`);
+          return null;
+        }
+      }
+
+      function scheduleValidation() {
+        if (validationTimer) clearTimeout(validationTimer);
+        validationTimer = setTimeout(validateSettings, 900);
+      }
+
+      function fileToDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function pct(status) {
+        if (status === "completed") return 100;
+        if (status === "running") return 60;
+        if (status === "skipped") return 100;
+        if (status === "failed") return 100;
+        return 0;
+      }
+
+      function statusText(item) {
+        if (!item) return "pending";
+        if (typeof item === "string") return item;
+        return item.status || "pending";
+      }
+
+      function statusMessage(item) {
+        if (!item || typeof item === "string") return "";
+        return item.message || "";
+      }
+
+      let d4ClipboardImages = [];
+
+      function renderD4Thumbs() {
+        const urls = d4ClipboardImages.slice(0, 8);
+        el.d4PasteHint.textContent = `已缓存图片: ${d4ClipboardImages.length}（支持剪贴板粘贴）`;
+        if (!urls.length) {
+          el.d4Thumbs.innerHTML = `<div class="empty">暂无图片附件（可粘贴/选择文件/填图片URL）</div>`;
+          return;
+        }
+        el.d4Thumbs.innerHTML = urls.map((u, i) => `
+          <div class="thumb">
+            <img src="${u}" alt="d4-img-${i}" />
+            <button type="button" onclick="window.removeD4Image(${i})">x</button>
+          </div>
+        `).join("");
+      }
+
+      window.removeD4Image = function (idx) {
+        d4ClipboardImages = d4ClipboardImages.filter((_, i) => i !== idx);
+        renderD4Thumbs();
+      };
+
+      function badgeCls(direction) {
+        const d = (direction || "NO_TRADE").toUpperCase();
+        if (d === "LONG") return "b-long";
+        if (d === "SHORT") return "b-short";
+        if (d === "FLAT") return "b-flat";
+        return "b-none";
+      }
+
+      function renderStats(system, stocks, account, d7) {
+        const cards = [
+          ["系统", system.is_running ? "RUNNING" : "STOPPED"],
+          ["交易池", String(stocks.count || 0)],
+          ["D7推荐", String(Object.values(d7 || {}).reduce((a, b) => a + b.length, 0))],
+          ["总资产", `$${num(account.total_value)}`],
+          ["累计PnL", `$${num(account.total_pnl)}`],
+        ];
+        el.stats.innerHTML = cards.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+      }
+
+      function renderDecisionBoard(analyses) {
+        const list = (Array.isArray(analyses) ? analyses : [])
+          .filter(x => x && x.trading_decision)
+          .sort((a, b) => String((b.trading_decision || {}).timestamp || "").localeCompare(String((a.trading_decision || {}).timestamp || "")));
+        if (!list.length) {
+          el.decisionBoard.innerHTML = `<div class="empty">暂无最终交易决定。运行一轮部门后将在此显示，便于你人工执行。</div>`;
+          return;
+        }
+        el.decisionBoard.innerHTML = list.map(item => {
+          const d = item.trading_decision || {};
+          const dir = (d.direction || "NO_TRADE").toUpperCase();
+          return `
+            <div class="decision-card">
+              <div class="decision-top">
+                <span>${item.symbol || "-"}</span>
+                <span class="badge ${badgeCls(dir)}">${dir}</span>
+              </div>
+              <div class="decision-meta">目标仓位: ${num(d.target_position)} | 时间: ${ts(d.timestamp)}</div>
+              <div class="decision-meta">理由: ${(d.rationale || "暂无").slice(0, 140)}</div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      function renderSystemChips(system, stocks, account) {
+        const health = system.is_running ? "ok" : "bad";
+        el.systemChips.innerHTML = [
+          `<span class="chip ${health}">${system.is_running ? "系统运行中" : "系统已停止"}</span>`,
+          `<span class="chip info">监控股票 ${stocks.count || 0}</span>`,
+          `<span class="chip info">账户净值 $${num(account.total_value)}</span>`,
+          `<span class="chip ${Number(account.total_pnl) >= 0 ? "ok" : "bad"}">PnL $${num(account.total_pnl)}</span>`,
+        ].join("");
+      }
+
+      function renderApiHealthBoard(results) {
+        const chips = Object.entries(results || {}).map(([k, v]) => {
+          if (v && v.ok) return `<span class="chip ok">${k}: OK</span>`;
+          return `<span class="chip bad">${k}: FAIL</span>`;
+        });
+        el.apiHealthBoard.innerHTML = chips.join("");
+      }
+
+      function renderD7Monitor(progress, jobs) {
+        const d7 = progress && progress.d7 ? progress.d7 : {};
+        const p = typeof d7.progress === "number" ? d7.progress : 0;
+        el.d7Stage.textContent = `D7 阶段: ${d7.stage || d7.status || "idle"}`;
+        el.d7Percent.textContent = `${p}%`;
+        el.d7Fill.style.width = `${p}%`;
+        el.d7Message.textContent = d7.message || "等待触发";
+
+        const d7Jobs = Object.values(jobs || {}).filter(j => j.type === "run_d7");
+        d7Jobs.sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
+        const latest = d7Jobs[0];
+        el.d7Job.textContent = latest
+          ? `任务 ${latest.job_id} | ${latest.status} | ${latest.stage || "-"} | ${latest.progress ?? 0}%`
+          : "当前任务: -";
+      }
+
+      function renderD7(d7) {
+        const groups = [["short", "短期交易"], ["mid", "中期交易"], ["long", "长期持有"]];
+        el.d7Recommendations.innerHTML = groups.map(([key, title]) => {
+          const list = d7[key] || [];
+          const items = list.length
+            ? list.map(item => `
+              <div class="reco-item">
+                <div><strong>${item.symbol}</strong> <span class="muted">${item.name || ""}</span></div>
+                <div class="muted">评分 ${num(item.score)} · 风险 ${num(item.risk_score)}</div>
+                <div class="muted">${item.why_now || ""}</div>
+                <div class="mt8"><button ${item.selected ? "disabled" : ""} onclick="selectReco('${item.symbol}')">${item.selected ? "已在池中" : "加入交易池"}</button></div>
+              </div>
+            `).join("")
+            : `<div class="empty">暂无推荐</div>`;
+          return `<div class="reco-col"><h4>${title}</h4>${items}</div>`;
+        }).join("");
+      }
+
+      function renderJobsBoard(jobs) {
+        const arr = Object.values(jobs || {});
+        arr.sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
+        if (!arr.length) {
+          el.jobsBoard.innerHTML = `<div class="empty">暂无任务</div>`;
+          return;
+        }
+        el.jobsBoard.innerHTML = arr.slice(0, 10).map(j => `
+          <div class="list-item">
+            <div class="top"><span>${j.type || "job"}</span><span>${j.status || "-"}</span></div>
+            <div class="sub">ID: ${j.job_id || "-"} | 进度: ${j.progress ?? 0}% | 阶段: ${j.stage || "-"}</div>
+            <div class="sub">开始: ${ts(j.started_at)}${j.finished_at ? ` | 结束: ${ts(j.finished_at)}` : ""}</div>
+          </div>
+        `).join("");
+      }
+
+      function renderHistoryBoard(history) {
+        const list = Array.isArray(history) ? history : [];
+        if (!list.length) {
+          el.historyBoard.innerHTML = `<div class="empty">暂无成交记录</div>`;
+          return;
+        }
+        const sorted = [...list].sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
+        el.historyBoard.innerHTML = sorted.slice(0, 12).map(h => `
+          <div class="list-item">
+            <div class="top"><span>${h.symbol || "-"}</span><span>${h.action || h.side || "-"}</span></div>
+            <div class="sub">数量: ${h.quantity ?? "-"} | 价格: ${h.price ?? "-"} | 费用: ${h.fee ?? "-"}</div>
+            <div class="sub">时间: ${ts(h.timestamp)} ${h.realized_pnl != null ? `| 已实现PnL: ${h.realized_pnl}` : ""}</div>
+          </div>
+        `).join("");
+      }
+
+      function renderSnapshot(account, positions) {
+        el.snapshotBoard.innerHTML = `
+          <div class="list-item">
+            <div class="top"><span>账户余额</span><span>$${num(account.cash)}</span></div>
+            <div class="sub">总资产: $${num(account.total_value)} | 累计PnL: $${num(account.total_pnl)}</div>
+            <div class="sub">最大回撤: ${num(account.max_drawdown)}</div>
+          </div>
+        `;
+
+        const pos = Array.isArray(positions) ? positions : [];
+        if (!pos.length) {
+          el.positionsBoard.innerHTML = `<div class="empty">暂无持仓</div>`;
+          return;
+        }
+
+        const rows = pos.map(p => `
+          <tr>
+            <td>${p.symbol || "-"}</td>
+            <td>${num(p.quantity)}</td>
+            <td>${num(p.current_price)}</td>
+            <td>${num(p.market_value)}</td>
+            <td>${num(p.unrealized_pnl)}</td>
+          </tr>
+        `).join("");
+
+        el.positionsBoard.innerHTML = `
+          <table class="positions-table">
+            <thead>
+              <tr><th>股票</th><th>数量</th><th>现价</th><th>市值</th><th>未实现PnL</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      function renderProgressBoard(progress) {
+        const g = progress && progress.global ? progress.global : {};
+        const d7 = progress && progress.d7 ? progress.d7 : {};
+        const rows = [
+          ["D1", statusText(g.D1), statusMessage(g.D1)],
+          ["D2", statusText(g.D2), statusMessage(g.D2)],
+          ["D3", statusText(g.D3), statusMessage(g.D3)],
+          ["D4", statusText(g.D4), statusMessage(g.D4)],
+          ["D5", statusText(g.D5), statusMessage(g.D5)],
+          ["D6", statusText(g.D6), statusMessage(g.D6)],
+          ["D7", `${d7.status || "idle"} (${d7.progress ?? 0}%)`, d7.message || ""],
+        ];
+        el.progressBoard.innerHTML = rows.map(([k, v, m]) => `
+          <div class="matrix-row">
+            <div class="head"><span>${k}</span><span>${v}</span></div>
+            <div class="bar"><div class="fill" style="width:${pct((String(v).includes("running") ? "running" : String(v)))}%"></div></div>
+            ${m ? `<div class="sub">${m}</div>` : ""}
+          </div>
+        `).join("");
+      }
+
+      function renderStockProgressBoard(progress, activeStocks) {
+        const stockMap = (progress && progress.stocks) || {};
+        const activeSet = new Set((activeStocks || []).map(s => String(s).toUpperCase()));
+        const symbols = Object.keys(stockMap).filter(s => activeSet.has(String(s).toUpperCase()));
+        if (!symbols.length) {
+          el.stockProgressBoard.innerHTML = `<div class="empty">暂无股票进度（先从 D7 选股加入交易池）</div>`;
+          return;
+        }
+        el.stockProgressBoard.innerHTML = symbols.map(symbol => {
+          const row = stockMap[symbol] || {};
+          const deps = ["D1", "D2", "D3", "D4", "D5", "D6"];
+          const chips = deps.map(dep => {
+            const st = statusText(row[dep]);
+            const cls = st === "completed" ? "ok" : (st === "failed" ? "bad" : "info");
+            return `<span class="chip ${cls}">${dep}:${st}</span>`;
+          }).join("");
+          return `<div class="list-item"><div class="top"><span>${symbol}</span></div><div class="chips mt8">${chips}</div></div>`;
+        }).join("");
+      }
+
+      function renderD4QueueBoard(rows) {
+        const list = Array.isArray(rows) ? rows : [];
+        if (!list.length) {
+          el.d4QueueBoard.innerHTML = `<div class="empty">D4 队列为空</div>`;
+          return;
+        }
+        const sorted = [...list].sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
+        el.d4QueueBoard.innerHTML = sorted.slice(0, 8).map(item => `
+          <div class="list-item">
+            <div class="top">
+              <span>${item.summary || "-"}</span>
+              <span>${item.stock_symbol || "GLOBAL"}</span>
+            </div>
+            <div class="sub">scope=${item.scope || "-"} | broadcast=${item.broadcast_to_all ? "yes" : "no"} | img=${item.image_count ?? 0}</div>
+            <div class="sub">${ts(item.timestamp)} | 信度 ${num(item.reliability_score)}</div>
+          </div>
+        `).join("");
+      }
+
+      function renderD5Training(reportWrap) {
+        const report = (reportWrap && reportWrap.report) || {};
+        const samples = report.samples || {};
+        if (!report.timestamp) {
+          el.d5TrainBoard.textContent = "尚未训练";
+          return;
+        }
+        const before = report.params_before || {};
+        const after = report.params_after || {};
+        const keyDelta = (k) => `${k}: ${num(before[k])} -> ${num(after[k])}`;
+        el.d5TrainBoard.innerHTML = `
+          <div class="list-item">
+            <div class="top"><span>最近训练</span><span>${ts(report.timestamp)}</span></div>
+            <div class="sub">样本: 持仓 ${samples.open_positions ?? 0} | 胜率 ${samples.open_win_rate ?? "-"} | 交易数 ${samples.trade_count ?? 0}</div>
+            <div class="sub">回撤: ${num((report.account || {}).max_drawdown)} | PnL: ${num((report.account || {}).total_pnl)}</div>
+            <div class="sub">${keyDelta("K")} | ${keyDelta("lambda_div")} | ${keyDelta("pos_max")}</div>
+          </div>
+        `;
+      }
+
+      async function renderCards(stocks, analyses, positions, progress) {
+        if (!stocks.length) {
+          el.stockCards.innerHTML = `<div class="empty">交易池为空。D1-D6 与 D5 不会激活。先运行 D7 并手动选股入池。</div>`;
+          return;
+        }
+
+        const analysisMap = new Map((analyses || []).map(a => [a.symbol, a]));
+        const posMap = new Map((positions || []).map(p => [p.symbol, p]));
+
+        const quoteEntries = await Promise.all(stocks.map(async symbol => {
+          const a = analysisMap.get(symbol) || {};
+          if (a.latest_price != null) return [symbol, { price: a.latest_price }];
+          try {
+            const q = await api(`/api/market/quote/${symbol}`);
+            return [symbol, q];
+          } catch {
+            return [symbol, {}];
+          }
+        }));
+        const quoteMap = new Map(quoteEntries);
+
+        el.stockCards.innerHTML = stocks.map(symbol => {
+          const a = analysisMap.get(symbol) || {};
+          const q = a.quant_output || {};
+          const d = a.trading_decision || {};
+          const p = posMap.get(symbol) || {};
+          const sProg = (progress.stocks && progress.stocks[symbol]) || {};
+          const nextRuns = (progress.next_runs && progress.next_runs.stocks && progress.next_runs.stocks[symbol]) || {};
+          const nextGlobal = (progress.next_runs && progress.next_runs.global) || {};
+          const direction = (d.direction || "NO_TRADE").toUpperCase();
+          const quote = quoteMap.get(symbol) || {};
+          const price = p.current_price || a.latest_price || quote.price;
+          const marketCap = quote.market_cap;
+          const dayMove = quote.change_percent;
+          const volume = quote.volume;
+          const spread = (quote.bid && quote.ask) ? (quote.ask - quote.bid) : null;
+
+          const deptOrder = ["D1", "D2", "D3", "D4", "D5", "D6"];
+          const bars = deptOrder.map(dep => {
+            const item = sProg[dep] || { status: "pending" };
+            const nextItem = dep === "D1"
+              ? (nextGlobal.D1 || {})
+              : dep === "D5"
+                ? (nextRuns.D5 || nextGlobal.D5 || {})
+                : (nextRuns[dep] || {});
+            const per = pct(item.status);
+            const right = (item.status === "pending" || item.status === "skipped" || item.status === "completed")
+              ? `${item.status} · ${countdown(nextItem.seconds_left)}`
+              : item.status;
+            const nextLine = nextItem && (nextItem.next_run || nextItem.last_run)
+              ? `<div class="sub">上次: ${ts(nextItem.last_run)} | 下次: ${ts(nextItem.next_run)}</div>`
+              : "";
+            return `<div class="prog-item"><div class="prog-head"><span>${dep}</span><span>${right}</span></div><div class="bar"><div class="fill" style="width:${per}%"></div></div>${nextLine}</div>`;
+          }).join("");
+
+          return `
+            <article class="card">
+              <div class="card-top">
+                <div class="symbol">${symbol}</div>
+                <span class="badge ${badgeCls(direction)}">${direction}</span>
+              </div>
+              <div class="kv">
+                <div>当前价: <strong>${num(price)}</strong></div>
+                <div>持仓量: <strong>${num(p.quantity)}</strong></div>
+                <div>市值: <strong>${num(p.market_value)}</strong></div>
+                <div>未实现收益: <strong>${num(p.unrealized_pnl)}</strong></div>
+                <div>总市值: <strong>${compactNum(marketCap)}</strong></div>
+                <div>日涨跌: <strong>${dayMove == null ? "-" : `${num(dayMove)}%`}</strong></div>
+                <div>成交量: <strong>${compactNum(volume)}</strong></div>
+                <div>买卖价差: <strong>${spread == null ? "-" : num(spread)}</strong></div>
+                <div>目标仓位: <strong>${num(d.target_position)}</strong></div>
+                <div>Final Alpha: <strong>${num(q.final_alpha)}</strong></div>
+                <div>研究门控: <strong>${num(q.research_gate)}</strong></div>
+                <div>波动率: <strong>${num(q.volatility)}</strong></div>
+              </div>
+              <div class="mt8 muted">决策理由: ${d.rationale || "暂无"}</div>
+              ${bars}
+            </article>`;
+        }).join("");
+      }
+
+      async function loadSettings() {
+        try {
+          const cfg = await api("/api/config/current");
+          renderSavedKeys(cfg.api_key_masked || {});
+          const m = cfg.model_settings || {};
+          const am = m.analyst_models || ["kimi", "openai", "glm5"];
+          const an = m.analyst_model_names || ["kimi-k2.5", "gpt-4o-mini", "glm-4-plus"];
+          el.ap1.value = am[0] === "chatgpt" ? "openai" : am[0];
+          el.ap2.value = am[1] === "chatgpt" ? "openai" : am[1];
+          el.ap3.value = am[2] === "chatgpt" ? "openai" : am[2];
+          el.am1.value = an[0] || "";
+          el.am2.value = an[1] || "";
+          el.am3.value = an[2] || "";
+          el.cp.value = m.critic_model === "chatgpt" ? "openai" : (m.critic_model || "deepseek");
+          el.dp.value = m.decider_model === "chatgpt" ? "openai" : (m.decider_model || "deepseek");
+          el.cm.value = m.critic_model_name || "deepseek-chat";
+          el.dm.value = m.decider_model_name || "deepseek-chat";
+          const cap = m.model_capabilities || {};
+          el.enableWebSearch.checked = cap.enable_web_search !== false;
+          el.enableVision.checked = cap.enable_vision !== false;
+          const iv = cfg.intervals || {};
+          el.intD1.value = iv.d1 ?? 60;
+          el.intD2.value = iv.d2 ?? 60;
+          el.intD3.value = iv.d3 ?? 60;
+          el.intD4.value = iv.d4 ?? 360;
+          el.intD6.value = iv.d6 ?? 30;
+          el.intD5Readonly.value = `${iv.d5_readonly ?? 240} 分钟（固定）`;
+        } catch {
+          // ignore
+        }
+      }
+
+      async function refreshAll() {
+        const results = await Promise.all([
+          safeApi("/api/system/status", { is_running: false }),
+          safeApi("/api/stocks/list", { stocks: [], count: 0 }),
+          safeApi("/api/trading/account", { total_value: 0, total_pnl: 0, cash: 0, max_drawdown: 0 }),
+          safeApi("/api/trading/history", { history: [] }),
+          safeApi("/api/analysis/all", { analyses: [] }),
+          safeApi("/api/trading/positions", { positions: [] }),
+          safeApi("/api/system/progress", { progress: { global: {}, stocks: {}, d7: { status: "idle", progress: 0, message: "" } } }),
+          safeApi("/api/system/jobs", { jobs: {} }),
+          safeApi("/api/d7/recommendations", { recommendations: { short: [], mid: [], long: [] } }),
+          safeApi("/api/d5/train/report", { report: {} }),
+          safeApi("/api/materials/list", { materials: [] }),
+        ]);
+        const [
+          systemRes, stocksRes, accountRes, historyRes, analysesRes, positionsRes,
+          progRes, jobsRes, d7Res, d5TrainRes, d4QueueRes
+        ] = results;
+
+        const system = systemRes.data;
+        const stocks = stocksRes.data;
+        const account = accountRes.data;
+        const history = historyRes.data;
+        const recos = (d7Res.data && d7Res.data.recommendations) || {};
+        const progress = (progRes.data && progRes.data.progress) || {};
+        const jobs = (jobsRes.data && jobsRes.data.jobs) || {};
+        const hist = (history && history.history) || [];
+        const positions = (positionsRes.data && positionsRes.data.positions) || [];
+        const d4Queue = (d4QueueRes.data && d4QueueRes.data.materials) || [];
+
+        renderApiHealthBoard({
+          status: systemRes,
+          stocks: stocksRes,
+          account: accountRes,
+          history: historyRes,
+          progress: progRes,
+          jobs: jobsRes,
+          d7: d7Res,
+          d4: d4QueueRes,
+        });
+        renderStats(system, stocks, account, recos);
+        renderDecisionBoard(analysesRes.data.analyses || []);
+        renderSystemChips(system, stocks, account);
+        renderD7Monitor(progress, jobs);
+        renderD7(recos);
+        renderJobsBoard(jobs);
+        renderHistoryBoard(hist);
+        renderSnapshot(account, positions);
+        renderProgressBoard(progress);
+        renderStockProgressBoard(progress, stocks.stocks || []);
+        renderD5Training(d5TrainRes.data || {});
+        renderD4QueueBoard(d4Queue);
+        await renderCards(stocks.stocks || [], analysesRes.data.analyses || [], positions, progress);
+
+        el.systemStatus.textContent = fmt(system);
+        el.tradeHistory.textContent = fmt(hist);
+        el.accountStatus.textContent = fmt(account);
+        el.positions.textContent = fmt(positions);
+        el.globalProgress.textContent = fmt({ global: progress.global, d7: progress.d7, stocks: progress.stocks, next_runs: progress.next_runs });
+        el.jobs.textContent = fmt(jobs);
+        el.telemetryStamp.textContent = `Telemetry: ${new Date().toLocaleString()}`;
+
+        const failCount = results.filter(x => !x.ok).length;
+        if (failCount > 0) setMsg(`刷新完成（${failCount} 个接口失败）`);
+        else setMsg("刷新成功", true);
+      }
+
+      window.selectReco = async function (symbol) {
+        try {
+          const res = await post("/api/d7/select", { symbol });
+          setMsg(res.message, true);
+          refreshAll();
+        } catch (e) {
+          setMsg(`加入交易池失败：${e.message}`);
+        }
+      };
+
+      document.getElementById("refreshBtn").addEventListener("click", refreshAll);
+      document.getElementById("refreshCardsBtn").addEventListener("click", refreshAll);
+
+      document.getElementById("startBtn").addEventListener("click", async () => {
+        try {
+          const res = await post("/api/system/start");
+          setMsg(res.message || "系统已启动", true);
+          refreshAll();
+        } catch (e) {
+          setMsg(`启动失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("stopBtn").addEventListener("click", async () => {
+        try {
+          const res = await post("/api/system/stop");
+          setMsg(res.message || "系统已停止", true);
+          refreshAll();
+        } catch (e) {
+          setMsg(`停止失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("runD7Btn").addEventListener("click", async () => {
+        try {
+          const res = await post("/api/system/run-d7");
+          setMsg(`D7任务已启动: ${res.job_id}`, true);
+          refreshAll();
+        } catch (e) {
+          setMsg(`D7启动失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("runOnceBtn").addEventListener("click", async () => {
+        try {
+          const res = await post("/api/system/run-once");
+          setMsg(`运行任务已启动: ${res.job_id}`, true);
+          refreshAll();
+        } catch (e) {
+          setMsg(`启动失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("addStockBtn").addEventListener("click", async () => {
+        const symbol = el.stockSymbol.value.trim().toUpperCase();
+        if (!symbol) return setMsg("请输入股票代码");
+        try {
+          const res = await post("/api/stocks/add", { symbol });
+          setMsg(res.message, true);
+          refreshAll();
+        } catch (e) {
+          setMsg(`添加失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("removeStockBtn").addEventListener("click", async () => {
+        const symbol = el.stockSymbol.value.trim().toUpperCase();
+        if (!symbol) return setMsg("请输入股票代码");
+        try {
+          const res = await post("/api/stocks/remove", { symbol });
+          setMsg(res.message, true);
+          refreshAll();
+        } catch (e) {
+          setMsg(`移除失败：${e.message}`);
+        }
+      });
+
+      el.d4Content.addEventListener("paste", async (evt) => {
+        const items = Array.from((evt.clipboardData && evt.clipboardData.items) || []);
+        const imageItems = items.filter(i => i.type && i.type.startsWith("image/"));
+        if (!imageItems.length) return;
+        for (const item of imageItems.slice(0, 8)) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          try {
+            const dataUrl = await fileToDataUrl(file);
+            if (dataUrl) d4ClipboardImages.push(dataUrl);
+          } catch {
+            // ignore single image failure
+          }
+        }
+        renderD4Thumbs();
+      });
+
+      el.d4ImageFiles.addEventListener("change", async () => {
+        const files = Array.from(el.d4ImageFiles.files || []).slice(0, 8);
+        const urls = await Promise.all(files.map(fileToDataUrl));
+        d4ClipboardImages = [...d4ClipboardImages, ...urls.filter(Boolean)].slice(0, 12);
+        renderD4Thumbs();
+      });
+
+      document.getElementById("clearD4MediaBtn").addEventListener("click", () => {
+        d4ClipboardImages = [];
+        el.d4ImageFiles.value = "";
+        el.d4ImageUrls.value = "";
+        renderD4Thumbs();
+      });
+
+      document.getElementById("uploadD4Btn").addEventListener("click", async () => {
+        const content = el.d4Content.value.trim();
+        const imageLines = (el.d4ImageUrls.value || "")
+          .split("\n")
+          .map(x => x.trim())
+          .filter(Boolean);
+        const image_urls = [...imageLines, ...d4ClipboardImages].filter(Boolean);
+        if (!content && image_urls.length === 0) return setMsg("请至少提供文本或图片");
+        const payload = {
+          stock_symbol: (el.d4StockSymbol.value.trim() || "").toUpperCase() || null,
+          summary: el.d4Summary.value.trim() || "用户上传材料",
+          reliability_score: Math.max(0, Math.min(1, Number(el.d4Reliability.value || 0.8))),
+          content,
+          image_urls,
+          broadcast_to_all_d4: !!el.d4BroadcastAll.checked,
+        };
+        try {
+          const res = await post("/api/materials/upload", payload);
+          setMsg(res.message || "D4 材料上传成功", true);
+          el.d4Content.value = "";
+          el.d4ImageUrls.value = "";
+          el.d4ImageFiles.value = "";
+          d4ClipboardImages = [];
+          renderD4Thumbs();
+          refreshAll();
+        } catch (e) {
+          setMsg(`D4 上传失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("trainD5Btn").addEventListener("click", async () => {
+        try {
+          const res = await post("/api/d5/train", {});
+          setMsg(res.message || "D5 训练完成", true);
+          renderD5Training({ report: res.report || {} });
+          refreshAll();
+        } catch (e) {
+          setMsg(`D5 训练失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("validateBtn").addEventListener("click", validateSettings);
+      document.getElementById("fetchKimiModelsBtn").addEventListener("click", async () => {
+        try {
+          const res = await api("/api/config/models/kimi");
+          renderKimiModelOptions(res.models || []);
+          setMsg(`Kimi 模型列表已更新，共 ${res.count} 个`, true);
+        } catch (e) {
+          setMsg(`拉取 Kimi 模型失败：${e.message}`);
+        }
+      });
+
+      document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
+        const validation = await validateSettings();
+        if (!validation) return;
+        if (validation.fail_count > 0) {
+          const go = confirm(`检测到 ${validation.fail_count} 个失败项，仍然保存吗？`);
+          if (!go) return;
+        }
+        try {
+          await post("/api/config/update", getSettingsPayload());
+          setMsg("Settings 保存成功", true);
+          await loadSettings();
+          refreshAll();
+        } catch (e) {
+          setMsg(`Settings 保存失败：${e.message}`);
+        }
+      });
+
+      [el.openaiKey, el.kimiKey, el.glm5Key, el.deepseekKey, el.intD1, el.intD2, el.intD3, el.intD4, el.intD6, el.ap1, el.ap2, el.ap3, el.am1, el.am2, el.am3, el.cp, el.cm, el.dp, el.dm, el.enableWebSearch, el.enableVision]
+        .forEach(node => node.addEventListener("input", scheduleValidation));
+
+      el.d4BroadcastAll.addEventListener("change", () => {
+        if (el.d4BroadcastAll.checked) el.d4StockSymbol.value = "";
+      });
+
+      renderD4Thumbs();
+      loadSettings().then(() => validateSettings());
+      refreshAll();
+      setInterval(refreshAll, 1500);
+    </script>
+  </body>
+</html>
