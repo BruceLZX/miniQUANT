@@ -1812,6 +1812,7 @@
           const periodPnl = perf.period_pnl || {};
           const price = p.current_price || quote.price || a.latest_price;
           const quantity = typeof p.quantity === "number" ? p.quantity : 0;
+          const hasPosition = Math.abs(quantity) > 1e-9;
           const marketValue = typeof p.market_value === "number" ? p.market_value : (quantity * (Number(price) || 0));
           const unrealizedPnl = typeof p.unrealized_pnl === "number" ? p.unrealized_pnl : 0;
           const marketCap = quote.market_cap;
@@ -1869,8 +1870,8 @@
               <div class="kv">
                 <div>当前价: <strong>${num(price)}</strong></div>
                 <div>持仓量: <strong>${num(quantity)}</strong></div>
-                <div>市值: <strong>${num(marketValue)}</strong></div>
-                <div>未实现收益: <strong>${num(unrealizedPnl)}</strong></div>
+                <div>持仓市值: <strong>${hasPosition ? num(marketValue) : "-"}</strong></div>
+                <div>未实现收益: <strong>${hasPosition ? num(unrealizedPnl) : "-"}</strong></div>
                 <div>总市值: <strong>${compactNum(marketCap)}</strong></div>
                 <div>日涨跌: <strong>${dayMove == null ? "-" : `${num(dayMove)}%`}</strong></div>
                 <div>成交量: <strong>${compactNum(volume)}</strong></div>

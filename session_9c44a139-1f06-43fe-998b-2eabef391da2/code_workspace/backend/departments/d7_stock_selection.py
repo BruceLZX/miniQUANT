@@ -362,20 +362,33 @@ class D7StockSelectionDepartment:
         for sym in all_syms[: max(30, top_k * 3)]:
             sec = self._sector_map.get(sym, "technology")
             hz = rnd.choice(["short", "mid", "long"])
+            macro_match = 0.5 + rnd.random() * 0.3
+            tailwind = 0.5 + rnd.random() * 0.3
+            momentum = 0.45 + rnd.random() * 0.35
+            flow = 0.4 + rnd.random() * 0.4
+            risk = 0.2 + rnd.random() * 0.5
+            score = (
+                0.20 * macro_match
+                + 0.25 * tailwind
+                + 0.20 * momentum
+                + 0.20 * flow
+                - 0.15 * risk
+                + rnd.uniform(-0.02, 0.02)
+            )
             out.append(StockCandidate(
                 symbol=sym,
                 name=sym,
                 horizon=hz,
-                score=0.0,
-                macro_match=0.5 + rnd.random() * 0.3,
-                industry_tailwind=0.5 + rnd.random() * 0.3,
-                news_momentum=0.45 + rnd.random() * 0.35,
-                whale_flow_heat=0.4 + rnd.random() * 0.4,
-                risk_score=0.2 + rnd.random() * 0.5,
+                score=score,
+                macro_match=macro_match,
+                industry_tailwind=tailwind,
+                news_momentum=momentum,
+                whale_flow_heat=flow,
+                risk_score=risk,
                 why_now=f"fallback diversified universe | sector={sec}",
                 disqualifiers=[]
             ))
-        out.sort(key=lambda x: x.macro_match + x.industry_tailwind + x.news_momentum - x.risk_score, reverse=True)
+        out.sort(key=lambda x: x.score, reverse=True)
         return self._diversify_by_sector(out, top_k)
 
     def _write_to_memory(self, candidates: List[StockCandidate]):

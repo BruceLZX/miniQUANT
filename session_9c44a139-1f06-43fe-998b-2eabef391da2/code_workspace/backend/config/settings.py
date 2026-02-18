@@ -57,7 +57,7 @@ class SystemConfig:
     
     # 交易规则
     max_daily_trades_per_stock: int = 2  # 每天每只股票最多交易2次
-    max_weekly_trading_days_per_stock: int = 2  # 每周每只股票最多选择2天交易
+    max_weekly_trading_days_per_stock: int = 3  # 每周每只股票最多选择3天交易
     
     # 风控参数
     max_position: float = 1.0  # 最大仓位
