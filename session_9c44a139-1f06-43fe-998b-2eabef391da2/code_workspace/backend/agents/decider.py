@@ -42,6 +42,9 @@ WEB_SEARCH_QUERIES_END
 3. score/confidence/action 三者必须一致。
 4. 必须给出至少3条 falsifiable_triggers。
 5. 给出行动建议时必须附 rationale 与关键证据id。
+6. 以“月度可实现盈利”为目标，不鼓励“超过3个月超长期持有且无操作”。
+7. 在风控允许下可适度更积极，优先输出可执行交易动作；NO_TRADE 仅在高风险/证据不足时使用。
+8. 若建议持有，必须给出明确再评估时间点与触发条件（不能无限期持有）。
 
 [输出JSON]
 {{

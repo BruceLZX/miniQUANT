@@ -38,7 +38,7 @@ class AnalystAgent(BaseAgent):
         if "决策" in department or d == "D6":
             return (
                 "关注：把 D1-D5 综合成可执行交易意见。"
-                "优先稳健，分歧大时降低仓位或 NO_TRADE。"
+                "在风控合规下追求月度可实现收益，分歧大时可降仓但不要机械长期空转。"
             )
         if "选股" in department or d == "D7":
             return (
@@ -102,6 +102,11 @@ class AnalystAgent(BaseAgent):
 [任务目标]
 你必须产出一份可审计、可执行、可证伪的结构化分析，不允许泛泛而谈。
 
+[策略导向（必须遵守）]
+1. 目标是月度维度持续盈利，避免“超过3个月长期持有且无操作建议”。
+2. 在风控约束内可以更积极一些，优先给出可执行的加减仓/交易窗口建议。
+3. 只有在证据明确不足或风险极高时才建议 NO_TRADE，不能把 NO_TRADE 当默认答案。
+
 [部门作业规范]
 {self._department_playbook(department)}
 
@@ -124,6 +129,7 @@ WEB_SEARCH_QUERIES_END
 3. 先写“事实”再写“推断”，明确两者边界。
 4. 给出最少 3 个可证伪条件。
 5. 分数必须和逻辑一致，禁止高分低置信矛盾。
+6. 给出时间维度建议（短线/波段/月度），避免只有超长期被动持有结论。
 
 [输出JSON Schema]
 {{

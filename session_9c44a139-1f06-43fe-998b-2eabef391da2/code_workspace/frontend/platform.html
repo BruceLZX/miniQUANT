@@ -341,6 +341,113 @@
         background: linear-gradient(90deg, #0a7b76, #20b37f);
       }
 
+      .dept-compact {
+        margin-top: 10px;
+        border: 1px solid #deebf8;
+        border-radius: 10px;
+        background: #f9fcff;
+        padding: 8px;
+      }
+
+      .dept-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .dept-pill {
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        border: 1px solid #dbe6f5;
+        background: #eef4ff;
+        color: #2f507d;
+      }
+
+      .dept-pill.ok {
+        background: #daf5e7;
+        border-color: #c2ead7;
+        color: #145c39;
+      }
+
+      .dept-pill.bad {
+        background: #feecef;
+        border-color: #f7ccd2;
+        color: #8a2634;
+      }
+
+      .dept-pill.run {
+        background: #e8f2ff;
+        border-color: #d2e3ff;
+        color: #234f84;
+      }
+
+      .dept-next {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .pnl-chart {
+        margin-top: 10px;
+        border: 1px solid #dbe6f5;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #ffffff, #f6fbff);
+        padding: 8px;
+      }
+
+      .pnl-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 4px;
+      }
+
+      .pnl-title {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .pnl-value {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .pnl-pos {
+        color: #1f8a54;
+      }
+
+      .pnl-neg {
+        color: #b4232f;
+      }
+
+      .spark-wrap {
+        width: 100%;
+        height: 68px;
+      }
+
+      .stock-progress-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .stock-progress-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 8px;
+      }
+
+      .stock-progress-sym {
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+
       .ops-grid {
         display: grid;
         gap: 10px;
@@ -839,7 +946,7 @@
       <section class="stats" id="stats"></section>
 
       <section class="panel mt12">
-        <div class="panel-hd">最终交易决定总览（可人工执行）</div>
+        <div class="panel-hd">最终交易决定总览（最近7天，已隐藏 NO_TRADE）</div>
         <div class="panel-bd">
           <div class="decision-grid" id="decisionBoard"></div>
         </div>
@@ -1114,6 +1221,7 @@
 
       const fmt = (obj) => JSON.stringify(obj, null, 2);
       const num = (v) => (typeof v === "number" ? v.toFixed(2) : "-");
+      const PNL_HISTORY_KEY = "myquant_pnl_history_v1";
       const compactNum = (v) => {
         if (typeof v !== "number" || !Number.isFinite(v)) return "-";
         const abs = Math.abs(v);
@@ -1122,6 +1230,53 @@
         if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
         return v.toFixed(2);
       };
+      function loadPnlHistoryMap() {
+        try {
+          const raw = localStorage.getItem(PNL_HISTORY_KEY);
+          const parsed = raw ? JSON.parse(raw) : {};
+          return parsed && typeof parsed === "object" ? parsed : {};
+        } catch {
+          return {};
+        }
+      }
+      function savePnlHistoryMap(map) {
+        try {
+          localStorage.setItem(PNL_HISTORY_KEY, JSON.stringify(map || {}));
+        } catch {
+          // ignore
+        }
+      }
+      function rememberStockPnlSnapshot(symbol, pnlValue) {
+        const map = loadPnlHistoryMap();
+        const now = Date.now();
+        const weekAgo = now - 7 * 24 * 3600 * 1000;
+        const key = String(symbol || "").toUpperCase();
+        const list = Array.isArray(map[key]) ? map[key] : [];
+        list.push({ t: now, v: Number(pnlValue) || 0 });
+        map[key] = list
+          .filter(x => x && Number.isFinite(Number(x.t)) && Number.isFinite(Number(x.v)) && Number(x.t) >= weekAgo)
+          .slice(-420);
+        savePnlHistoryMap(map);
+        return map[key];
+      }
+      function buildSparkline(values, width = 260, height = 68) {
+        const arr = (Array.isArray(values) ? values : []).map(v => Number(v)).filter(v => Number.isFinite(v));
+        if (!arr.length) {
+          const mid = Math.round(height / 2);
+          return { line: `0,${mid} ${width},${mid}`, area: `0,${height} 0,${mid} ${width},${mid} ${width},${height}` };
+        }
+        if (arr.length === 1) arr.push(arr[0]);
+        const min = Math.min(...arr);
+        const max = Math.max(...arr);
+        const range = Math.max(1e-6, max - min);
+        const step = width / Math.max(1, arr.length - 1);
+        const pts = arr.map((v, i) => {
+          const x = i * step;
+          const y = height - ((v - min) / range) * (height - 8) - 4;
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+        return { line: pts.join(" "), area: `0,${height} ${pts.join(" ")} ${width},${height}` };
+      }
       const getNow = () => new Date().toLocaleTimeString();
       const ts = (raw) => {
         if (!raw) return "-";
@@ -1351,11 +1506,20 @@
       }
 
       function renderDecisionBoard(analyses) {
+        const now = Date.now();
+        const weekAgo = now - 7 * 24 * 3600 * 1000;
         const list = (Array.isArray(analyses) ? analyses : [])
           .filter(x => x && x.trading_decision)
+          .filter(x => {
+            const d = x.trading_decision || {};
+            const dir = String(d.direction || "NO_TRADE").toUpperCase();
+            if (dir === "NO_TRADE") return false;
+            const t = Date.parse(String(d.timestamp || ""));
+            return Number.isFinite(t) && t >= weekAgo;
+          })
           .sort((a, b) => String((b.trading_decision || {}).timestamp || "").localeCompare(String((a.trading_decision || {}).timestamp || "")));
         if (!list.length) {
-          el.decisionBoard.innerHTML = `<div class="empty">暂无最终交易决定。运行一轮部门后将在此显示，便于你人工执行。</div>`;
+          el.decisionBoard.innerHTML = `<div class="empty">最近 7 天暂无可执行交易决策（已自动隐藏 NO_TRADE）。</div>`;
           return;
         }
         el.decisionBoard.innerHTML = list.map(item => {
@@ -1522,16 +1686,17 @@
           el.stockProgressBoard.innerHTML = `<div class="empty">暂无股票进度（先从 D7 选股加入交易池）</div>`;
           return;
         }
-        el.stockProgressBoard.innerHTML = symbols.map(symbol => {
+        el.stockProgressBoard.innerHTML = `<div class="stock-progress-grid">${symbols.map(symbol => {
           const row = stockMap[symbol] || {};
           const deps = ["D1", "D2", "D3", "D4", "D5", "D6"];
           const chips = deps.map(dep => {
             const st = statusText(row[dep]);
-            const cls = st === "completed" ? "ok" : (st === "failed" ? "bad" : "info");
-            return `<span class="chip ${cls}">${dep}:${st}</span>`;
+            const cls = st === "completed" ? "ok" : (st === "failed" ? "bad" : (st === "running" ? "run" : ""));
+            const short = st === "completed" ? "ok" : (st === "failed" ? "err" : (st === "running" ? "run" : "wait"));
+            return `<span class="dept-pill ${cls}">${dep}:${short}</span>`;
           }).join("");
-          return `<div class="list-item"><div class="top"><span>${symbol}</span></div><div class="chips mt8">${chips}</div></div>`;
-        }).join("");
+          return `<div class="stock-progress-item"><div class="stock-progress-sym">${symbol}</div><div class="dept-row">${chips}</div></div>`;
+        }).join("")}</div>`;
       }
 
       function renderD4QueueBoard(rows) {
@@ -1611,22 +1776,37 @@
           const spread = (quote.bid && quote.ask) ? (quote.ask - quote.bid) : null;
 
           const deptOrder = ["D1", "D2", "D3", "D4", "D5", "D6"];
-          const bars = deptOrder.map(dep => {
+          const pills = deptOrder.map(dep => {
             const item = sProg[dep] || { status: "pending" };
             const nextItem = dep === "D1"
               ? (nextGlobal.D1 || {})
               : dep === "D5"
                 ? (nextRuns.D5 || nextGlobal.D5 || {})
                 : (nextRuns[dep] || {});
-            const per = pct(item.status);
-            const right = (item.status === "pending" || item.status === "skipped" || item.status === "completed")
-              ? `${item.status} · ${countdown(nextItem.seconds_left)}`
-              : item.status;
-            const nextLine = nextItem && (nextItem.next_run || nextItem.last_run)
-              ? `<div class="sub">上次: ${ts(nextItem.last_run)} | 下次: ${ts(nextItem.next_run)}</div>`
-              : "";
-            return `<div class="prog-item"><div class="prog-head"><span>${dep}</span><span>${right}</span></div><div class="bar"><div class="fill" style="width:${per}%"></div></div>${nextLine}</div>`;
+            const st = String(item.status || "pending");
+            const cls = st === "completed" ? "ok" : (st === "failed" ? "bad" : (st === "running" ? "run" : ""));
+            const left = Number(nextItem.seconds_left);
+            const tail = Number.isFinite(left) && left > 0 ? ` ${countdown(left)}` : "";
+            return `<span class="dept-pill ${cls}">${dep}:${st}${tail}</span>`;
           }).join("");
+
+          const nextCandidates = deptOrder.map(dep => {
+            const nextItem = dep === "D1"
+              ? (nextGlobal.D1 || {})
+              : dep === "D5"
+                ? (nextRuns.D5 || nextGlobal.D5 || {})
+                : (nextRuns[dep] || {});
+            return { dep, sec: Number(nextItem.seconds_left) };
+          }).filter(x => Number.isFinite(x.sec) && x.sec > 0)
+            .sort((a, b) => a.sec - b.sec);
+          const nextHint = nextCandidates.length ? `下一分析: ${nextCandidates[0].dep} · ${countdown(nextCandidates[0].sec)}` : "下一分析: 即将开始";
+
+          const totalPnl = (Number(p.unrealized_pnl) || 0) + (Number(p.realized_pnl) || 0);
+          const hist = rememberStockPnlSnapshot(symbol, totalPnl);
+          const spark = buildSparkline(hist.map(x => x.v));
+          const pnlCls = totalPnl >= 0 ? "pnl-pos" : "pnl-neg";
+          const lineColor = totalPnl >= 0 ? "#179c67" : "#c93d4b";
+          const areaColor = totalPnl >= 0 ? "rgba(23,156,103,0.16)" : "rgba(201,61,75,0.16)";
 
           return `
             <article class="card">
@@ -1649,7 +1829,20 @@
                 <div>波动率: <strong>${num(q.volatility)}</strong></div>
               </div>
               <div class="mt8 muted">决策理由: ${d.rationale || "暂无"}</div>
-              ${bars}
+              <div class="pnl-chart">
+                <div class="pnl-head">
+                  <span class="pnl-title">7天收益走势</span>
+                  <span class="pnl-value ${pnlCls}">$${num(totalPnl)}</span>
+                </div>
+                <svg class="spark-wrap" viewBox="0 0 260 68" preserveAspectRatio="none">
+                  <polyline points="${spark.area}" fill="${areaColor}" stroke="none"></polyline>
+                  <polyline points="${spark.line}" fill="none" stroke="${lineColor}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                </svg>
+              </div>
+              <div class="dept-compact">
+                <div class="dept-row">${pills}</div>
+                <div class="dept-next">${nextHint}</div>
+              </div>
             </article>`;
         }).join("");
       }
