@@ -3,13 +3,14 @@ D6 投资决策委员会（IC）
 """
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from models.base_models import Evidence, TradingDecision, DepartmentFinal, QuantOutput
+from models.base_models import Evidence, TradingDecision, DepartmentFinal, QuantOutput, AnalystOutput
 from memory.memory_store import MemoryManager
 from agents.base_agent import AgentConfig
 from agents.analyst import AnalystAgent
 from agents.critic import CriticAgent
 from agents.decider import DeciderAgent
 import asyncio
+import re
 
 
 class D6ICDepartment:
@@ -87,13 +88,21 @@ class D6ICDepartment:
         # 4. 构建交易决策
         direction = self._determine_direction(dept_final.score, risk_controls)
         target_position = self._calculate_target_position(dept_final.score, quant_output.position, risk_controls)
-        
+        pool_action = self._resolve_pool_action(
+            direction=direction,
+            round3_action=str(getattr(dept_final.round3_output, "action_recommendation", "") or ""),
+            thesis=str(getattr(dept_final.round3_output, "thesis", "") or ""),
+            model_pool_action=str(getattr(dept_final.round3_output, "pool_action", "keep") or "keep")
+        )
+        execution_plan = self._build_execution_plan(direction, target_position, current_position)
+        execution_plan["pool_action"] = pool_action
+
         trading_decision = TradingDecision(
             symbol=symbol,
             timestamp=datetime.now(),
             direction=direction,
             target_position=target_position,
-            execution_plan=self._build_execution_plan(direction, target_position, current_position),
+            execution_plan=execution_plan,
             risk_controls=risk_controls,
             rationale=dept_final.round3_output.thesis,
             evidence_ids=dept_final.round3_output.evidence_ids,
@@ -151,9 +160,30 @@ class D6ICDepartment:
         )
         context['memory_summary'] = memory_summary
         
-        # Round 1: 独立分析
+        # Round 1: 独立分析（容错：单个分析员失败不应让整个 D6 失败）
         tasks = [analyst.execute(context) for analyst in self.analysts]
-        analyst_outputs = await asyncio.gather(*tasks)
+        outputs = await asyncio.gather(*tasks, return_exceptions=True)
+        analyst_outputs: List[AnalystOutput] = []
+        failures = 0
+        for idx, out in enumerate(outputs):
+            if isinstance(out, Exception):
+                failures += 1
+                a = self.analysts[idx]
+                analyst_outputs.append(AnalystOutput(
+                    analyst_id=getattr(a, "analyst_id", f"D6_analyst_{idx}"),
+                    model_provider=getattr(a, "model_provider", ""),
+                    stance="neutral",
+                    score=0.0,
+                    confidence=0.15,
+                    key_evidence=[],
+                    counter_evidence=[],
+                    falsifiable_conditions=["D6 analyst model unavailable in this round"],
+                    reasoning=f"D6 analyst downgraded due to model failure: {out}"
+                ))
+            else:
+                analyst_outputs.append(out)
+        if failures >= len(outputs):
+            raise RuntimeError("All analysts failed in D6 round1")
         
         # Round 2: 批评质疑
         critic_output = await self.critic.execute({
@@ -254,6 +284,33 @@ class D6ICDepartment:
             'time_in_force': 'DAY',  # 当日有效
             'split_orders': abs(target_position - current_position) > 0.3  # 大额订单分批执行
         }
+
+    def _resolve_pool_action(
+        self,
+        direction: str,
+        round3_action: str,
+        thesis: str,
+        model_pool_action: str
+    ) -> str:
+        """解析 D6 对股票池的建议动作。"""
+        if str(model_pool_action).strip().lower() == "remove_if_flat":
+            return "remove_if_flat"
+        text = f"{round3_action} {thesis}".lower()
+        long_idle_patterns = [
+            r"remove[_\s-]*from[_\s-]*pool",
+            r"drop[_\s-]*from[_\s-]*pool",
+            r"不再跟踪",
+            r"移出股票池",
+            r"长期不交易",
+            r"至少.{0,8}(周|月).{0,8}不交易",
+            r"不会碰",
+        ]
+        for p in long_idle_patterns:
+            if re.search(p, text):
+                return "remove_if_flat"
+        if direction in ("NO_TRADE", "FLAT") and ("长期" in text and "观望" in text):
+            return "remove_if_flat"
+        return "keep"
     
     def _write_to_memory(self, decision: TradingDecision, symbol: str):
         """写入记忆"""

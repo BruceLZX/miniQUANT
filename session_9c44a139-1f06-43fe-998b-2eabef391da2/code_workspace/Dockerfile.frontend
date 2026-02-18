@@ -1,0 +1,8 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY ./frontend/ /app/
+
+EXPOSE 5273
+
+CMD ["python", "-m", "http.server", "5273", "--bind", "0.0.0.0"]

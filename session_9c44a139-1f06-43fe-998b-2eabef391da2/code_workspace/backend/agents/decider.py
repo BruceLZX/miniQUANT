@@ -45,6 +45,7 @@ WEB_SEARCH_QUERIES_END
 6. 以“月度可实现盈利”为目标，不鼓励“超过3个月超长期持有且无操作”。
 7. 在风控允许下可适度更积极，优先输出可执行交易动作；NO_TRADE 仅在高风险/证据不足时使用。
 8. 若建议持有，必须给出明确再评估时间点与触发条件（不能无限期持有）。
+9. 若判断该股票未来一段时间（如至少4周）不应交易/跟踪，且后续可在空仓时移出股票池，请将 pool_action 设为 "remove_if_flat"。
 
 [输出JSON]
 {{
@@ -55,6 +56,7 @@ WEB_SEARCH_QUERIES_END
   "thesis": "一句话结论",
   "falsifiable_triggers": ["...","...","..."],
   "action_recommendation": "加仓|减仓|观望|不交易|LONG|SHORT|FLAT|NO_TRADE",
+  "pool_action": "keep|remove_if_flat",
   "evidence_ids": ["source_id_1","source_id_2"],
   "rationale": "可执行理由"
 }}
@@ -98,7 +100,7 @@ WEB_SEARCH_QUERIES_END
                     if sid:
                         evidence_ids.append(sid)
 
-        return DeciderOutput(
+        out = DeciderOutput(
             decider_id=self.decider_id,
             model_provider=self.model_provider,
             consensus_points=parsed.get('consensus_points', []),
@@ -110,6 +112,9 @@ WEB_SEARCH_QUERIES_END
             action_recommendation=parsed.get('action_recommendation', '观望'),
             evidence_ids=evidence_ids
         )
+        # 兼容扩展字段，不影响既有数据结构
+        out.pool_action = str(parsed.get("pool_action", "keep") or "keep").strip().lower()
+        return out
 
     def parse_response(self, response: str) -> Dict[str, Any]:
         import json

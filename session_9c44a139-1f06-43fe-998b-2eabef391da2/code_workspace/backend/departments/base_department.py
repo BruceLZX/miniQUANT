@@ -5,7 +5,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import asyncio
-from models.base_models import DepartmentFinal, Evidence
+import logging
+from models.base_models import DepartmentFinal, Evidence, AnalystOutput
 from memory.memory_store import MemoryManager
 from agents.analyst import AnalystAgent
 from agents.critic import CriticAgent
@@ -22,6 +23,7 @@ class BaseDepartment(ABC):
                  agent_configs: Optional[Dict[str, AgentConfig]] = None):
         self.department_type = department_type
         self.memory_manager = memory_manager
+        self.logger = logging.getLogger(__name__)
         
         # 初始化agents
         self.analysts: List[AnalystAgent] = []
@@ -142,9 +144,38 @@ class BaseDepartment(ABC):
         
         # 并行执行三个分析者
         tasks = [analyst.execute(context) for analyst in self.analysts]
-        outputs = await asyncio.gather(*tasks)
-        
-        return list(outputs)
+        outputs = await asyncio.gather(*tasks, return_exceptions=True)
+        normalized: List[Any] = []
+        failures = 0
+        for idx, out in enumerate(outputs):
+            if isinstance(out, Exception):
+                failures += 1
+                analyst = self.analysts[idx]
+                self.logger.warning(
+                    "Round1 analyst failed: dept=%s analyst=%s provider=%s model=%s err=%s",
+                    self.department_type,
+                    getattr(analyst, "analyst_id", f"{self.department_type}_analyst_{idx}"),
+                    getattr(analyst, "model_provider", ""),
+                    getattr(getattr(analyst, "config", None), "model_name", ""),
+                    out,
+                )
+                normalized.append(AnalystOutput(
+                    analyst_id=getattr(analyst, "analyst_id", f"{self.department_type}_analyst_{idx}"),
+                    model_provider=getattr(analyst, "model_provider", ""),
+                    stance="neutral",
+                    score=0.0,
+                    confidence=0.15,
+                    key_evidence=evidence_pack[:2],
+                    counter_evidence=[],
+                    falsifiable_conditions=["Analyst model unavailable in this round"],
+                    reasoning=f"Model call failed and was downgraded: {out}"
+                ))
+            else:
+                normalized.append(out)
+
+        if failures >= len(outputs):
+            raise RuntimeError(f"All analysts failed in {self.department_type} round1")
+        return normalized
     
     async def _run_round2(self, analyst_outputs: List[Any]) -> Any:
         """Round 2: 批评质疑"""

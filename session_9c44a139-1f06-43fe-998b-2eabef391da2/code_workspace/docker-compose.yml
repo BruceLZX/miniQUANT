@@ -1,0 +1,33 @@
+services:
+  backend:
+    container_name: myquant-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: sqlite:////app/data/trading_platform.db
+    volumes:
+      - myquant_data:/app/data
+      - myquant_state:/app/logs
+      - ./runtime/runtime_config.json:/app/.runtime_config.json
+      - ./runtime/runtime_state.json:/app/.runtime_state.json
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    container_name: myquant-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5273:5273"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  myquant_data:
+  myquant_state:

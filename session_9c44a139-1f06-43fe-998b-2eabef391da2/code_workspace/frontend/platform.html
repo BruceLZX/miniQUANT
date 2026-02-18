@@ -1222,6 +1222,8 @@
       const fmt = (obj) => JSON.stringify(obj, null, 2);
       const num = (v) => (typeof v === "number" ? v.toFixed(2) : "-");
       const PNL_HISTORY_KEY = "myquant_pnl_history_v1";
+      const QUOTE_CACHE_KEY = "myquant_quote_cache_v1";
+      const CARD_PREFS_KEY = "myquant_card_prefs_v1";
       const compactNum = (v) => {
         if (typeof v !== "number" || !Number.isFinite(v)) return "-";
         const abs = Math.abs(v);
@@ -1230,6 +1232,36 @@
         if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
         return v.toFixed(2);
       };
+      const money = (v) => {
+        if (typeof v !== "number" || !Number.isFinite(v)) return "-";
+        const sign = v >= 0 ? "+" : "-";
+        return `${sign}$${num(Math.abs(v))}`;
+      };
+      function loadJsonObject(key) {
+        try {
+          const raw = localStorage.getItem(key);
+          const parsed = raw ? JSON.parse(raw) : {};
+          return parsed && typeof parsed === "object" ? parsed : {};
+        } catch {
+          return {};
+        }
+      }
+      function saveJsonObject(key, obj) {
+        try {
+          localStorage.setItem(key, JSON.stringify(obj || {}));
+        } catch {
+          // ignore
+        }
+      }
+      let quoteCache = loadJsonObject(QUOTE_CACHE_KEY);
+      let cardPrefs = loadJsonObject(CARD_PREFS_KEY);
+      function rememberQuote(symbol, quote) {
+        const key = String(symbol || "").toUpperCase();
+        const old = quoteCache[key] && typeof quoteCache[key] === "object" ? quoteCache[key] : {};
+        quoteCache[key] = { ...old, ...(quote || {}), _ts: Date.now() };
+        saveJsonObject(QUOTE_CACHE_KEY, quoteCache);
+        return quoteCache[key];
+      }
       function loadPnlHistoryMap() {
         try {
           const raw = localStorage.getItem(PNL_HISTORY_KEY);
@@ -1622,12 +1654,16 @@
         `).join("");
       }
 
-      function renderSnapshot(account, positions) {
+      function renderSnapshot(account, positions, portfolioPerf) {
+        const perf = (portfolioPerf && portfolioPerf.performance) || {};
+        const period = perf.period_pnl || {};
         el.snapshotBoard.innerHTML = `
           <div class="list-item">
             <div class="top"><span>账户余额</span><span>$${num(account.cash)}</span></div>
             <div class="sub">总资产: $${num(account.total_value)} | 累计PnL: $${num(account.total_pnl)}</div>
             <div class="sub">最大回撤: ${num(account.max_drawdown)}</div>
+            <div class="sub">本周: <strong>${money(period.week)}</strong> | 本月: <strong>${money(period.month)}</strong></div>
+            <div class="sub">半年: <strong>${money(period.half_year)}</strong> | 本年: <strong>${money(period.year)}</strong></div>
           </div>
         `;
 
@@ -1738,7 +1774,7 @@
         `;
       }
 
-      async function renderCards(stocks, analyses, positions, progress) {
+      async function renderCards(stocks, analyses, positions, progress, stockPerfMap) {
         if (!stocks.length) {
           el.stockCards.innerHTML = `<div class="empty">交易池为空。D1-D6 与 D5 不会激活。先运行 D7 并手动选股入池。</div>`;
           return;
@@ -1749,12 +1785,15 @@
 
         const quoteEntries = await Promise.all(stocks.map(async symbol => {
           const a = analysisMap.get(symbol) || {};
-          if (a.latest_price != null) return [symbol, { price: a.latest_price }];
+          const cached = quoteCache[String(symbol || "").toUpperCase()] || {};
           try {
             const q = await api(`/api/market/quote/${symbol}`);
-            return [symbol, q];
+            return [symbol, rememberQuote(symbol, q)];
           } catch {
-            return [symbol, {}];
+            const fallback = Object.keys(cached).length
+              ? cached
+              : (a.latest_price != null ? { price: a.latest_price } : {});
+            return [symbol, fallback];
           }
         }));
         const quoteMap = new Map(quoteEntries);
@@ -1769,11 +1808,21 @@
           const nextGlobal = (progress.next_runs && progress.next_runs.global) || {};
           const direction = (d.direction || "NO_TRADE").toUpperCase();
           const quote = quoteMap.get(symbol) || {};
-          const price = p.current_price || a.latest_price || quote.price;
+          const perf = (stockPerfMap && stockPerfMap[symbol]) || {};
+          const periodPnl = perf.period_pnl || {};
+          const price = p.current_price || quote.price || a.latest_price;
+          const quantity = typeof p.quantity === "number" ? p.quantity : 0;
+          const marketValue = typeof p.market_value === "number" ? p.market_value : (quantity * (Number(price) || 0));
+          const unrealizedPnl = typeof p.unrealized_pnl === "number" ? p.unrealized_pnl : 0;
           const marketCap = quote.market_cap;
           const dayMove = quote.change_percent;
           const volume = quote.volume;
           const spread = (quote.bid && quote.ask) ? (quote.ask - quote.bid) : null;
+          const largeThreshold = quote.large_trade_threshold_usd;
+          const largeCount = quote.large_trade_count;
+          const largeNet = quote.large_trade_net;
+          const returnKey = `${String(symbol).toUpperCase()}:return_period`;
+          const returnOpen = !!cardPrefs[returnKey];
 
           const deptOrder = ["D1", "D2", "D3", "D4", "D5", "D6"];
           const pills = deptOrder.map(dep => {
@@ -1790,6 +1839,7 @@
             return `<span class="dept-pill ${cls}">${dep}:${st}${tail}</span>`;
           }).join("");
 
+          const runningDep = deptOrder.find(dep => String((sProg[dep] || {}).status || "").toLowerCase() === "running");
           const nextCandidates = deptOrder.map(dep => {
             const nextItem = dep === "D1"
               ? (nextGlobal.D1 || {})
@@ -1799,7 +1849,9 @@
             return { dep, sec: Number(nextItem.seconds_left) };
           }).filter(x => Number.isFinite(x.sec) && x.sec > 0)
             .sort((a, b) => a.sec - b.sec);
-          const nextHint = nextCandidates.length ? `下一分析: ${nextCandidates[0].dep} · ${countdown(nextCandidates[0].sec)}` : "下一分析: 即将开始";
+          const nextHint = runningDep
+            ? `进行中: ${runningDep}`
+            : (nextCandidates.length ? `下一分析: ${nextCandidates[0].dep} · ${countdown(nextCandidates[0].sec)}` : "下一分析: 即将开始");
 
           const totalPnl = (Number(p.unrealized_pnl) || 0) + (Number(p.realized_pnl) || 0);
           const hist = rememberStockPnlSnapshot(symbol, totalPnl);
@@ -1816,13 +1868,15 @@
               </div>
               <div class="kv">
                 <div>当前价: <strong>${num(price)}</strong></div>
-                <div>持仓量: <strong>${num(p.quantity)}</strong></div>
-                <div>市值: <strong>${num(p.market_value)}</strong></div>
-                <div>未实现收益: <strong>${num(p.unrealized_pnl)}</strong></div>
+                <div>持仓量: <strong>${num(quantity)}</strong></div>
+                <div>市值: <strong>${num(marketValue)}</strong></div>
+                <div>未实现收益: <strong>${num(unrealizedPnl)}</strong></div>
                 <div>总市值: <strong>${compactNum(marketCap)}</strong></div>
                 <div>日涨跌: <strong>${dayMove == null ? "-" : `${num(dayMove)}%`}</strong></div>
                 <div>成交量: <strong>${compactNum(volume)}</strong></div>
                 <div>买卖价差: <strong>${spread == null ? "-" : num(spread)}</strong></div>
+                <div>大单笔数(${largeThreshold ? `>${compactNum(largeThreshold)}` : "动态阈值"}): <strong>${typeof largeCount === "number" ? num(largeCount) : "-"}</strong></div>
+                <div>大单净额: <strong>${money(largeNet)}</strong></div>
                 <div>目标仓位: <strong>${num(d.target_position)}</strong></div>
                 <div>Final Alpha: <strong>${num(q.final_alpha)}</strong></div>
                 <div>研究门控: <strong>${num(q.research_gate)}</strong></div>
@@ -1839,12 +1893,30 @@
                   <polyline points="${spark.line}" fill="none" stroke="${lineColor}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
                 </svg>
               </div>
+              <details class="mt8" data-symbol="${symbol}" data-panel="return_period" ${returnOpen ? "open" : ""}>
+                <summary class="muted" style="cursor:pointer">收益区间</summary>
+                <div class="kv" style="margin-top:6px">
+                  <div>本周: <strong>${money(periodPnl.week)}</strong></div>
+                  <div>本月: <strong>${money(periodPnl.month)}</strong></div>
+                  <div>半年: <strong>${money(periodPnl.half_year)}</strong></div>
+                  <div>本年: <strong>${money(periodPnl.year)}</strong></div>
+                </div>
+              </details>
               <div class="dept-compact">
                 <div class="dept-row">${pills}</div>
                 <div class="dept-next">${nextHint}</div>
               </div>
             </article>`;
         }).join("");
+
+        const panels = el.stockCards.querySelectorAll("details[data-symbol][data-panel]");
+        panels.forEach((node) => {
+          node.addEventListener("toggle", () => {
+            const k = `${String(node.dataset.symbol || "").toUpperCase()}:${String(node.dataset.panel || "")}`;
+            cardPrefs[k] = !!node.open;
+            saveJsonObject(CARD_PREFS_KEY, cardPrefs);
+          });
+        });
       }
 
       async function loadSettings() {
@@ -1892,10 +1964,12 @@
           safeApi("/api/d7/recommendations", { recommendations: { short: [], mid: [], long: [] } }),
           safeApi("/api/d5/train/report", { report: {} }),
           safeApi("/api/materials/list", { materials: [] }),
+          safeApi("/api/performance/portfolio", { performance: { period_pnl: {} } }),
+          safeApi("/api/performance/stocks", { performance: { stocks: {} } }),
         ]);
         const [
           systemRes, stocksRes, accountRes, historyRes, analysesRes, positionsRes,
-          progRes, jobsRes, d7Res, d5TrainRes, d4QueueRes
+          progRes, jobsRes, d7Res, d5TrainRes, d4QueueRes, portfolioPerfRes, stockPerfRes
         ] = results;
 
         const system = systemRes.data;
@@ -1908,6 +1982,7 @@
         const hist = (history && history.history) || [];
         const positions = (positionsRes.data && positionsRes.data.positions) || [];
         const d4Queue = (d4QueueRes.data && d4QueueRes.data.materials) || [];
+        const stockPerfMap = (((stockPerfRes.data || {}).performance || {}).stocks) || {};
 
         renderApiHealthBoard({
           status: systemRes,
@@ -1926,12 +2001,12 @@
         renderD7(recos);
         renderJobsBoard(jobs);
         renderHistoryBoard(hist);
-        renderSnapshot(account, positions);
+        renderSnapshot(account, positions, portfolioPerfRes.data || {});
         renderProgressBoard(progress);
         renderStockProgressBoard(progress, stocks.stocks || []);
         renderD5Training(d5TrainRes.data || {});
         renderD4QueueBoard(d4Queue);
-        await renderCards(stocks.stocks || [], analysesRes.data.analyses || [], positions, progress);
+        await renderCards(stocks.stocks || [], analysesRes.data.analyses || [], positions, progress, stockPerfMap);
 
         el.systemStatus.textContent = fmt(system);
         el.tradeHistory.textContent = fmt(hist);

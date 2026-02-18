@@ -52,8 +52,8 @@ class D5QuantDepartment:
 
             # 风险控制
             'lambda_div': 0.5,
-            'K': 1.0,
-            'pos_max': 1.0,
+            'K': 0.6,
+            'pos_max': 0.8,
             'epsilon': 1e-6
         }
         self.last_training_report: Dict[str, Any] = {}
@@ -191,17 +191,22 @@ class D5QuantDepartment:
         w1 = self.params['w_1']
         w2 = self.params['w_2']
         w3 = self.params['w_3']
-        return w1 * whale_flow.bf + w2 * whale_flow.dp + w3 * whale_flow.of
+        bf = float(np.clip(whale_flow.bf, -3.0, 3.0))
+        dp = float(np.clip(whale_flow.dp, -3.0, 3.0))
+        of = float(np.clip(whale_flow.of, -3.0, 3.0))
+        wf = w1 * bf + w2 * dp + w3 * of
+        return float(np.clip(wf, -4.0, 4.0))
 
     def _calculate_market_alpha(self, r_t: float, z_vwap: float, imb_t: float, WF_t: float) -> float:
         """计算市场alpha（不依赖LLM）"""
-        return (
+        alpha = (
             self.params['beta_0']
             + self.params['beta_1'] * r_t
             + self.params['beta_2'] * z_vwap
             + self.params['beta_3'] * imb_t
             + self.params['beta_4'] * WF_t
         )
+        return float(np.clip(alpha, -6.0, 6.0))
 
     def _calculate_research_factor(self, department_finals: Dict[str, DepartmentFinal]) -> tuple:
         """计算研究因子"""

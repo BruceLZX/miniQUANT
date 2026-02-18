@@ -1,0 +1,29 @@
+# Runtime state and secrets
+runtime/
+*.env
+*.env.*
+
+# Python caches and artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs and local data
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Node/frontend artifacts
+node_modules/
+dist/
+build/
+
+# IDE / OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

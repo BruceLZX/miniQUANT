@@ -276,8 +276,7 @@ async def startup_event():
                 scheduler.remove_stock(sym)
                 removed.append(sym)
         except Exception:
-            scheduler.remove_stock(sym)
-            removed.append(sym)
+            logger.warning(f"Skip removing {sym} on startup due to transient validation error")
     if removed:
         logger.warning(f"Removed invalid symbols on startup: {removed}")
     # 启动调度器（在后台运行）
@@ -496,6 +495,29 @@ async def get_trade_history(symbol: Optional[str] = None):
     """获取交易历史"""
     return {
         "history": scheduler.get_trade_history(symbol),
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/api/performance/portfolio")
+async def get_portfolio_performance():
+    """获取组合收益（总收益、周/月/半年/年）。"""
+    return {
+        "performance": scheduler.get_portfolio_performance(),
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/api/performance/stocks")
+async def get_stock_performance(symbols: Optional[str] = None):
+    """获取个股收益（每只股票周/月/半年/年）。"""
+    selected = None
+    if symbols:
+        selected = [x.strip().upper() for x in symbols.split(",") if x.strip()]
+    else:
+        selected = list(scheduler.state.active_stocks)
+    return {
+        "performance": scheduler.get_stock_performance(selected),
         "timestamp": datetime.now().isoformat()
     }
 
@@ -1004,8 +1026,14 @@ async def get_market_quote(symbol: str):
             "change_percent": cached.get("change_percent"),
             "market_cap": cached.get("market_cap"),
             "avg_volume_3m": cached.get("avg_volume_3m"),
+            "avg_volume_3m_dollar": cached.get("avg_volume_3m_dollar"),
             "short_name": cached.get("short_name"),
-            "source": source
+            "source": source,
+            "large_trade_threshold_usd": cached.get("large_trade_threshold_usd"),
+            "large_trade_count": cached.get("large_trade_count"),
+            "large_trade_notional": cached.get("large_trade_notional"),
+            "large_trade_net": cached.get("large_trade_net"),
+            "tape_source": cached.get("tape_source")
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

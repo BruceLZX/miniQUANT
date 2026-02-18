@@ -114,6 +114,8 @@ class PaperTradingEngine:
         
         # 交易记录
         self.trade_history: List[Dict[str, Any]] = []
+        # 账户净值快照，用于区间收益计算
+        self.equity_history: List[Dict[str, Any]] = []
         
         # 统计
         self.daily_trade_counts: Dict[str, int] = {}  # 每只股票每日交易次数
@@ -123,6 +125,7 @@ class PaperTradingEngine:
         from config.settings import config
         self.max_daily_trades_per_stock = config.max_daily_trades_per_stock
         self.max_weekly_trading_days_per_stock = config.max_weekly_trading_days_per_stock
+        self.record_equity_snapshot("init")
     
     
     async def execute_decision(self, decision: TradingDecision, current_price: float) -> Order:
@@ -134,9 +137,13 @@ class PaperTradingEngine:
         
         # 2. 创建订单
         order = self._create_order_from_decision(decision, current_price)
+        if order.status == "REJECTED" or order.quantity <= 0:
+            return order
         
         # 3. 模拟执行
         filled_order = await self._simulate_execution(order, current_price)
+        if filled_order.status != "FILLED" or filled_order.filled_quantity <= 0:
+            return filled_order
         
         # 4. 更新账户状态
         self._update_account(filled_order)
@@ -177,13 +184,56 @@ class PaperTradingEngine:
 
     def _create_order_from_decision(self, decision: TradingDecision, current_price: float) -> Order:
         """从交易决策创建订单"""
+        if current_price <= 0:
+            return self._create_rejected_order(decision, "Invalid market price")
+
+        direction = str(decision.direction or "").upper().strip()
+        if direction == "NO_TRADE":
+            return self._create_rejected_order(decision, "NO_TRADE decision")
+
         decision_id = getattr(decision, "decision_id", str(uuid.uuid4()))
-        # 先创建订单对象
+        symbol = str(decision.symbol or "").upper()
+        position = self.account.positions.get(symbol)
+        current_qty = float(position.quantity if position else 0.0)
+        current_value = current_qty * current_price
+        total_value = max(float(self.account.total_value), 1.0)
+
+        # target_position 是账户资金占比（[-1,1]）；纸面账户当前仅支持 long-only 执行。
+        target_ratio = abs(float(decision.target_position or 0.0))
+        target_ratio = max(0.0, min(1.0, target_ratio))
+        desired_value = target_ratio * total_value
+
+        if direction in ("FLAT",):
+            desired_value = 0.0
+        elif direction == "SHORT":
+            # 先不做裸卖空，避免负仓位污染资金曲线
+            desired_value = 0.0
+
+        delta_value = desired_value - current_value
+        if abs(delta_value) < max(10.0, current_price * 0.05):
+            return self._create_rejected_order(decision, "Delta too small")
+
+        side = "BUY" if delta_value > 0 else "SELL"
+        quantity = abs(delta_value) / current_price
+        if side == "SELL":
+            quantity = min(quantity, current_qty)
+            if quantity <= 0:
+                return self._create_rejected_order(decision, "No position to sell")
+        else:
+            affordable_qty = max(0.0, float(self.account.cash) / current_price)
+            quantity = min(quantity, affordable_qty)
+            if quantity <= 0:
+                return self._create_rejected_order(decision, "Insufficient cash")
+
+        quantity = float(max(0.0, quantity))
+        if quantity <= 0:
+            return self._create_rejected_order(decision, "Invalid quantity")
+
         order = Order(
-            symbol=decision.symbol,
-            side="BUY" if decision.direction == "LONG" else "SELL",
+            symbol=symbol,
+            side=side,
             order_type="LIMIT",
-            quantity=decision.target_position,
+            quantity=quantity,
             price=current_price,
             decision_id=decision_id
         )
@@ -272,6 +322,8 @@ class PaperTradingEngine:
         drawdown = (self.account.peak_value - current_value) / self.account.peak_value
         if drawdown > self.account.max_drawdown:
             self.account.max_drawdown = drawdown
+        self._recalculate_account_metrics()
+        self.record_equity_snapshot("trade")
     
     
     def _record_trade(self, order: Order, decision: TradingDecision):
@@ -299,6 +351,7 @@ class PaperTradingEngine:
     
     def get_account_summary(self) -> Dict[str, Any]:
         """获取账户摘要"""
+        self._recalculate_account_metrics()
         return self.account.to_dict()
     
     def get_positions(self) -> List[Dict[str, Any]]:
@@ -323,3 +376,113 @@ class PaperTradingEngine:
             "symbols_traded": list(set([t['order']['symbol'] for t in today_trades])),
             "daily_pnl": self.account.daily_pnl
         }
+
+    def mark_to_market(self, symbol: str, price: float):
+        """按最新行情更新持仓市值与账户指标。"""
+        pos = self.account.positions.get(symbol)
+        if not pos:
+            return
+        pos.update_price(price)
+        self._recalculate_account_metrics()
+
+    def _symbol_pnl_map(self) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        for sym, pos in self.account.positions.items():
+            out[str(sym).upper()] = float(pos.unrealized_pnl or 0.0) + float(pos.realized_pnl or 0.0)
+        return out
+
+    def _recalculate_account_metrics(self):
+        total_unrealized = sum(float(p.unrealized_pnl or 0.0) for p in self.account.positions.values())
+        total_realized = sum(float(p.realized_pnl or 0.0) for p in self.account.positions.values())
+        self.account.total_pnl = total_unrealized + total_realized
+        today = date.today().isoformat()
+        today_snaps = [x for x in self.equity_history if str(x.get("timestamp", "")).startswith(today)]
+        if today_snaps:
+            day_open = float(today_snaps[0].get("total_value", self.account.initial_capital) or self.account.initial_capital)
+            self.account.daily_pnl = self.account.total_value - day_open
+        else:
+            self.account.daily_pnl = self.account.total_value - self.account.initial_capital
+
+    def record_equity_snapshot(self, reason: str = ""):
+        """记录净值快照（含每股PnL），供周/月/半年/年收益查询。"""
+        self._recalculate_account_metrics()
+        now = datetime.now()
+        snap = {
+            "timestamp": now.isoformat(),
+            "reason": reason,
+            "total_value": float(self.account.total_value),
+            "total_pnl": float(self.account.total_pnl),
+            "cash": float(self.account.cash),
+            "symbol_pnl": self._symbol_pnl_map(),
+        }
+        if self.equity_history:
+            last = self.equity_history[-1]
+            if (now - datetime.fromisoformat(last["timestamp"])).total_seconds() < 20 and \
+               abs(float(last.get("total_value", 0.0)) - snap["total_value"]) < 1e-9:
+                return
+        self.equity_history.append(snap)
+        if len(self.equity_history) > 12000:
+            self.equity_history = self.equity_history[-12000:]
+
+    def _find_snapshot_before(self, cutoff: datetime) -> Optional[Dict[str, Any]]:
+        for row in reversed(self.equity_history):
+            try:
+                ts = datetime.fromisoformat(str(row.get("timestamp")))
+            except Exception:
+                continue
+            if ts <= cutoff:
+                return row
+        return None
+
+    def get_portfolio_performance(self) -> Dict[str, Any]:
+        self._recalculate_account_metrics()
+        now = datetime.now()
+        periods = {
+            "week": 7,
+            "month": 30,
+            "half_year": 182,
+            "year": 365,
+        }
+        by_period: Dict[str, Optional[float]] = {}
+        for key, days in periods.items():
+            base = self._find_snapshot_before(now - timedelta(days=days))
+            if not base:
+                by_period[key] = float(self.account.total_pnl)
+                continue
+            by_period[key] = float(self.account.total_value) - float(base.get("total_value", self.account.total_value))
+        return {
+            "total_pnl": float(self.account.total_pnl),
+            "total_value": float(self.account.total_value),
+            "period_pnl": by_period,
+            "as_of": now.isoformat(),
+        }
+
+    def get_stock_performance(self, symbols: Optional[List[str]] = None) -> Dict[str, Any]:
+        now = datetime.now()
+        periods = {
+            "week": 7,
+            "month": 30,
+            "half_year": 182,
+            "year": 365,
+        }
+        selected = {str(s).upper() for s in (symbols or [])}
+        current_map = self._symbol_pnl_map()
+        if not selected:
+            selected = set(current_map.keys())
+        rows: Dict[str, Any] = {}
+        for sym in sorted(selected):
+            current = float(current_map.get(sym, 0.0))
+            pp: Dict[str, Optional[float]] = {}
+            for key, days in periods.items():
+                base = self._find_snapshot_before(now - timedelta(days=days))
+                if not base:
+                    pp[key] = current
+                    continue
+                base_map = dict(base.get("symbol_pnl") or {})
+                pp[key] = current - float(base_map.get(sym, 0.0) or 0.0)
+            rows[sym] = {
+                "symbol": sym,
+                "total_pnl": current,
+                "period_pnl": pp,
+            }
+        return {"stocks": rows, "as_of": now.isoformat()}

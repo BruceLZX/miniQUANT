@@ -230,6 +230,7 @@ class TradingPlatformScheduler:
             "trade_history": list(self.trading_engine.trade_history),
             "daily_trade_counts": dict(self.trading_engine.daily_trade_counts),
             "weekly_trade_days": weekly,
+            "equity_history": list(getattr(self.trading_engine, "equity_history", []) or []),
         }
 
     def _deserialize_trading_engine(self, raw: Dict[str, Any]):
@@ -256,6 +257,9 @@ class TradingPlatformScheduler:
 
         self.trading_engine.trade_history = list(raw.get("trade_history") or [])
         self.trading_engine.daily_trade_counts = dict(raw.get("daily_trade_counts") or {})
+        self.trading_engine.equity_history = list(raw.get("equity_history") or [])
+        if not self.trading_engine.equity_history:
+            self.trading_engine.record_equity_snapshot("restore_init")
         weekly_raw = raw.get("weekly_trade_days") or {}
         weekly_out = {}
         for sym, week_map in weekly_raw.items():
@@ -429,7 +433,7 @@ class TradingPlatformScheduler:
         }
         out["global"]["D1"] = self._build_next_run_item("D1", self._get_interval_minutes("D1"), now)
         out["global"]["D5"] = self._build_next_run_item("D5", self._get_interval_minutes("D5"), now)
-        for symbol in self.state.active_stocks:
+        for symbol in list(self.state.active_stocks):
             out["stocks"][symbol] = {
                 "D2": self._build_next_run_item(f"D2_{symbol}", self._get_interval_minutes("D2"), now),
                 "D3": self._build_next_run_item(f"D3_{symbol}", self._get_interval_minutes("D3"), now),
@@ -558,11 +562,36 @@ class TradingPlatformScheduler:
     
     def _should_run_department(self, dept_key: str, now: datetime, interval: timedelta) -> bool:
         """判断是否应该运行部门"""
+        # 若上次状态为失败，则优先重试，不受冷却间隔限制
+        if self._is_failed_department(dept_key):
+            return True
+
         if dept_key not in self.state.last_run_times:
             return True
         
         last_run = self.state.last_run_times[dept_key]
         return (now - last_run) >= interval
+
+    def _is_failed_department(self, dept_key: str) -> bool:
+        """根据调度键判断对应部门当前是否为 failed。"""
+        # 全局部门（如 D1）
+        if "_" not in dept_key:
+            status = (
+                self.state.progress.get("global", {})
+                .get(dept_key, {})
+                .get("status", "")
+            )
+            return str(status).lower() == "failed"
+
+        # 按股票部门（如 D2_AAPL、D6_MSFT）
+        dep, symbol = dept_key.split("_", 1)
+        status = (
+            self.state.progress.get("stocks", {})
+            .get(symbol, {})
+            .get(dep, {})
+            .get("status", "")
+        )
+        return str(status).lower() == "failed"
     
     async def _run_d7(self, progress_cb=None):
         """运行D7选股"""
@@ -599,11 +628,12 @@ class TradingPlatformScheduler:
                 "score": c.score,
                 "why_now": c.why_now,
                 "risk_score": c.risk_score,
-                "selected": c.symbol in self.state.active_stocks
+                "selected": False
             }
             grouped.setdefault(c.horizon, []).append(item)
 
         self.state.d7_recommendations = grouped
+        self._prune_d7_recommendations()
         picked_symbols = [c.symbol for c in selected_candidates]
         self.state.d7_history.append(picked_symbols)
         self.state.d7_history = self.state.d7_history[-20:]
@@ -828,6 +858,7 @@ class TradingPlatformScheduler:
         for symbol, result in zip(symbols, results):
             if isinstance(result, Exception):
                 self.logger.error(f"D5 run failed for {symbol}: {result}")
+        self.trading_engine.record_equity_snapshot("d5_cycle")
     
     async def _run_d5(self, symbol: str):
         """运行D5量化"""
@@ -859,7 +890,7 @@ class TradingPlatformScheduler:
                 decision_direction = str(self.stock_cases[symbol].trading_decision.direction or "")
             if symbol in self.trading_engine.account.positions:
                 pos = self.trading_engine.account.positions[symbol]
-                pos.update_price(market_data.price)
+                self.trading_engine.mark_to_market(symbol, market_data.price)
                 pnl_ratio = 0.0
                 base_mv = max(1e-9, abs(pos.market_value))
                 if base_mv > 1e-9:
@@ -921,10 +952,14 @@ class TradingPlatformScheduler:
             
             # 执行交易
             await self._execute_trade(decision, symbol)
-            
+
             self.state.last_run_times[f"D6_{symbol}"] = datetime.now()
             # 完成一轮后清空状态，进入下一轮倒计时
             self._reset_stock_cycle_progress(symbol, last_decision=decision.direction)
+            pool_action = str((decision.execution_plan or {}).get("pool_action", "keep")).strip().lower()
+            if pool_action == "remove_if_flat" and self._is_flat_position(symbol):
+                self.logger.info("Auto-removing %s from active stocks based on D6 pool_action=remove_if_flat", symbol)
+                self.remove_stock(symbol)
             self._persist_runtime_state()
         except Exception as e:
             self._set_stock_progress(symbol, "D6", "failed", str(e))
@@ -941,12 +976,97 @@ class TradingPlatformScheduler:
         
         self.event_cooldowns[symbol] = now
         return True
+
+    async def _estimate_large_prints_from_yahoo(self, symbol: str, timeout_sec: int = 10) -> Dict[str, float]:
+        """
+        基于 Yahoo 1m 全日序列近似“逐笔成交记录”，并自适应大单阈值：
+        - baseline: 50万美元
+        - adaptive: max(50万, 当日1m成交额P95, 当日总成交额0.2%)
+        """
+        import aiohttp
+
+        y_symbol = symbol.replace(".", "-").upper()
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{y_symbol}?interval=1m&range=1d&includePrePost=false"
+        timeout = aiohttp.ClientTimeout(total=timeout_sec)
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"yahoo chart status={resp.status}")
+                data = await resp.json()
+        result = (((data or {}).get("chart") or {}).get("result") or [None])[0]
+        if not result:
+            raise RuntimeError("empty chart")
+        quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+        closes = list(quote.get("close") or [])
+        vols = list(quote.get("volume") or [])
+        notionals: List[float] = []
+        total_volume = 0.0
+        total_notional = 0.0
+        prev_close = None
+        n = min(len(closes), len(vols))
+        for i in range(n):
+            c = closes[i]
+            v = vols[i]
+            if c is None or v is None:
+                continue
+            c = float(c)
+            v = float(v)
+            if c <= 0 or v <= 0:
+                prev_close = c if c > 0 else prev_close
+                continue
+            notional = c * v
+            total_volume += v
+            total_notional += notional
+            notionals.append(notional)
+            prev_close = c
+        if not notionals:
+            return {
+                "threshold_usd": 500000.0,
+                "large_trade_count": 0.0,
+                "large_trade_notional": 0.0,
+                "large_trade_net": 0.0,
+                "adv": 1.0,
+                "adv_dollar": 1.0,
+            }
+        sorted_notionals = sorted(notionals)
+        p95_index = min(len(sorted_notionals) - 1, int(0.95 * (len(sorted_notionals) - 1)))
+        p95_notional = float(sorted_notionals[p95_index])
+        threshold = float(max(500000.0, p95_notional, total_notional * 0.002))
+        large_count = 0
+        large_notional = 0.0
+        large_net = 0.0
+        prev_close = None
+        for i in range(n):
+            c = closes[i]
+            v = vols[i]
+            if c is None or v is None:
+                continue
+            c = float(c)
+            v = float(v)
+            if c <= 0 or v <= 0:
+                prev_close = c if c > 0 else prev_close
+                continue
+            notional = c * v
+            if notional >= threshold:
+                large_count += 1
+                large_notional += notional
+                signed = 1.0 if (prev_close is None or c >= prev_close) else -1.0
+                large_net += signed * notional
+            prev_close = c
+        return {
+            "threshold_usd": threshold,
+            "large_trade_count": float(large_count),
+            "large_trade_notional": float(large_notional),
+            "large_trade_net": float(large_net),
+            "adv": float(max(total_volume, 1.0)),
+            "adv_dollar": float(max(total_notional, 1.0)),
+        }
     
     async def _get_market_data(self, symbol: str):
-        """获取市场数据（Stooq优先，Yahoo兜底，最后随机降级）"""
+        """获取市场数据（Stooq优先，Yahoo兜底，失败时仅用缓存真实数据）。"""
         from models.base_models import MarketData, WhaleFlow
         import aiohttp
-        import random
         import csv
         from io import StringIO
         y_symbol = symbol.replace(".", "-").upper()
@@ -981,29 +1101,143 @@ class TradingPlatformScheduler:
                                     ask_size=max(8000.0, vol_v * 0.002)
                                 )
                                 adv = max(vol_v, 1_000_000.0)
+                                adv_dollar = max(close_v * adv, 1_000_000.0)
                                 chg_pct = ((close_v - open_v) / open_v * 100.0) if open_v > 0 else 0.0
+                                # 优先用 Yahoo 全日1m成交记录估算大单流；失败再用价格变化近似
+                                large_stats = {}
+                                try:
+                                    large_stats = await self._estimate_large_prints_from_yahoo(symbol)
+                                except Exception:
+                                    large_stats = {}
+                                adv_dollar_used = float(large_stats.get("adv_dollar", adv_dollar))
+                                block_net = float(large_stats.get("large_trade_net", (close_v - open_v) * adv * 0.08))
+                                large_notional = float(
+                                    large_stats.get("large_trade_notional", abs(chg_pct) / 100.0 * adv_dollar_used * 0.5)
+                                )
                                 whale_flow = WhaleFlow(
                                     symbol=symbol,
                                     timestamp=datetime.now(),
-                                    block_net_buy_value=(close_v - open_v) * adv * 0.08,
-                                    dark_pool_net=(chg_pct / 100.0) * adv * 0.03,
-                                    options_whale_notional=abs(chg_pct) * adv * 0.5,
-                                    adv=adv
+                                    block_net_buy_value=block_net,
+                                    dark_pool_net=block_net * 0.15,
+                                    options_whale_notional=large_notional * 0.12,
+                                    adv=max(adv_dollar_used, 1.0)
                                 )
+                                cached_meta = self.market_cache.get(symbol) or {}
+                                market_cap = cached_meta.get("market_cap")
+                                short_name = str(cached_meta.get("short_name") or symbol)
+                                try:
+                                    quote_url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={y_symbol}"
+                                    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                                    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                                        async with session.get(quote_url) as q_resp:
+                                            if q_resp.status == 200:
+                                                q_data = await q_resp.json()
+                                                row = (((q_data or {}).get("quoteResponse") or {}).get("result") or [None])[0]
+                                                if row:
+                                                    market_cap = float(row.get("marketCap") or 0.0) or None
+                                                    short_name = str(row.get("shortName") or row.get("longName") or symbol)
+                                except Exception:
+                                    pass
                                 self.market_cache[symbol] = {
                                     "price": close_v,
                                     "ts": datetime.now().isoformat(),
                                     "source": "stooq",
                                     "change_percent": chg_pct,
-                                    "market_cap": None,
+                                    "market_cap": market_cap,
                                     "avg_volume_3m": adv,
-                                    "short_name": symbol
+                                    "avg_volume_3m_dollar": adv_dollar_used,
+                                    "short_name": short_name,
+                                    "large_trade_threshold_usd": float(large_stats.get("threshold_usd", max(500000.0, adv_dollar_used * 0.002))),
+                                    "large_trade_count": int(large_stats.get("large_trade_count", max(0, int(abs((close_v - open_v) * adv) / 500000.0)))),
+                                    "large_trade_notional": float(large_stats.get("large_trade_notional", abs((close_v - open_v) * adv))),
+                                    "large_trade_net": float(large_stats.get("large_trade_net", (close_v - open_v) * adv * 0.35)),
+                                    "tape_source": "yahoo_chart_1m"
                                 }
                                 return market_data, whale_flow
 
-            # 2) Yahoo 兜底
+            # 2) Yahoo Chart 兜底（无需 quote v7）
+            chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{y_symbol}?interval=1m&range=1d&includePrePost=false"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(chart_url) as resp:
+                    if resp.status == 200:
+                        chart_data = await resp.json()
+                        result = (((chart_data or {}).get("chart") or {}).get("result") or [None])[0]
+                        if result:
+                            quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+                            closes = list(quote.get("close") or [])
+                            vols = list(quote.get("volume") or [])
+                            valid = []
+                            n = min(len(closes), len(vols))
+                            for i in range(n):
+                                c = closes[i]
+                                v = vols[i]
+                                if c is None or v is None:
+                                    continue
+                                c = float(c)
+                                v = float(v)
+                                if c <= 0:
+                                    continue
+                                valid.append((c, max(v, 0.0)))
+                            if valid:
+                                open_v = float(valid[0][0])
+                                close_v = float(valid[-1][0])
+                                vol_v = float(sum(v for _, v in valid))
+                                adv = max(vol_v, 1_000_000.0)
+                                adv_dollar = max(close_v * adv, 1_000_000.0)
+                                chg_pct = ((close_v - open_v) / open_v * 100.0) if open_v > 0 else 0.0
+
+                                market_data = MarketData(
+                                    symbol=symbol,
+                                    timestamp=datetime.now(),
+                                    price=close_v,
+                                    volume=max(vol_v, 1.0),
+                                    vwap=(open_v + close_v) / 2.0,
+                                    bid_price=close_v * 0.9995,
+                                    ask_price=close_v * 1.0005,
+                                    bid_size=max(12000.0, vol_v * 0.0015),
+                                    ask_size=max(12000.0, vol_v * 0.0015),
+                                )
+                                large_stats = {}
+                                try:
+                                    large_stats = await self._estimate_large_prints_from_yahoo(symbol)
+                                except Exception:
+                                    large_stats = {}
+                                adv_dollar_used = float(large_stats.get("adv_dollar", adv_dollar))
+                                block_net = float(large_stats.get("large_trade_net", (close_v - open_v) * adv * 0.08))
+                                large_notional = float(
+                                    large_stats.get("large_trade_notional", abs(chg_pct) / 100.0 * adv_dollar_used * 0.5)
+                                )
+                                whale_flow = WhaleFlow(
+                                    symbol=symbol,
+                                    timestamp=datetime.now(),
+                                    block_net_buy_value=block_net,
+                                    dark_pool_net=block_net * 0.15,
+                                    options_whale_notional=large_notional * 0.12,
+                                    adv=max(adv_dollar_used, 1.0)
+                                )
+                                cached_meta = self.market_cache.get(symbol) or {}
+                                self.market_cache[symbol] = {
+                                    "price": close_v,
+                                    "ts": datetime.now().isoformat(),
+                                    "source": "yahoo_chart",
+                                    "change_percent": chg_pct,
+                                    "market_cap": cached_meta.get("market_cap"),
+                                    "avg_volume_3m": adv,
+                                    "avg_volume_3m_dollar": adv_dollar_used,
+                                    "short_name": str(cached_meta.get("short_name") or symbol),
+                                    "large_trade_threshold_usd": float(large_stats.get("threshold_usd", max(500000.0, adv_dollar_used * 0.002))),
+                                    "large_trade_count": int(large_stats.get("large_trade_count", 0)),
+                                    "large_trade_notional": float(large_stats.get("large_trade_notional", 0.0)),
+                                    "large_trade_net": float(large_stats.get("large_trade_net", 0.0)),
+                                    "tape_source": "yahoo_chart_1m"
+                                }
+                                return market_data, whale_flow
+
+            # 3) Yahoo quote v7 兜底
             url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={y_symbol}"
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 async with session.get(url) as resp:
                     if resp.status != 200:
                         raise RuntimeError(f"quote status={resp.status}")
@@ -1024,6 +1258,7 @@ class TradingPlatformScheduler:
             ask_sz = float(row.get("askSize") or 20000.0)
             vwap = float(row.get("regularMarketPrice") or price)
             adv = float(row.get("averageDailyVolume3Month") or volume or 1_000_000.0)
+            adv_dollar = max(price * adv, 1_000_000.0)
             chg_pct = float(row.get("regularMarketChangePercent") or 0.0)
             cap = float(row.get("marketCap") or 0.0)
             short_name = str(row.get("shortName") or row.get("longName") or symbol)
@@ -1041,13 +1276,23 @@ class TradingPlatformScheduler:
                 bid_size=bid_sz if bid_sz > 0 else 20000.0,
                 ask_size=ask_sz if ask_sz > 0 else 20000.0
             )
+            large_stats = {}
+            try:
+                large_stats = await self._estimate_large_prints_from_yahoo(symbol)
+            except Exception:
+                large_stats = {}
+            adv_dollar_used = float(large_stats.get("adv_dollar", adv_dollar))
+            block_net = float(large_stats.get("large_trade_net", delta * adv * 0.08))
+            large_notional = float(
+                large_stats.get("large_trade_notional", abs(chg_pct) / 100.0 * adv_dollar_used * 0.5)
+            )
             whale_flow = WhaleFlow(
                 symbol=symbol,
                 timestamp=datetime.now(),
-                block_net_buy_value=delta * adv * 0.08,
-                dark_pool_net=(chg_pct / 100.0) * adv * 0.03,
-                options_whale_notional=abs(chg_pct) * adv * 0.5,
-                adv=max(adv, 1.0)
+                block_net_buy_value=block_net,
+                dark_pool_net=block_net * 0.15,
+                options_whale_notional=large_notional * 0.12,
+                adv=max(adv_dollar_used, 1.0)
             )
             self.market_cache[symbol] = {
                 "price": price,
@@ -1056,7 +1301,13 @@ class TradingPlatformScheduler:
                 "change_percent": chg_pct,
                 "market_cap": cap if cap > 0 else None,
                 "avg_volume_3m": adv if adv > 0 else None,
-                "short_name": short_name
+                "avg_volume_3m_dollar": adv_dollar_used,
+                "short_name": short_name,
+                "large_trade_threshold_usd": float(large_stats.get("threshold_usd", max(500000.0, adv_dollar_used * 0.002))),
+                "large_trade_count": int(large_stats.get("large_trade_count", max(0, int(abs(delta * adv) / 500000.0)))),
+                "large_trade_notional": float(large_stats.get("large_trade_notional", abs(delta * adv))),
+                "large_trade_net": float(large_stats.get("large_trade_net", delta * adv * 0.35)),
+                "tape_source": "yahoo_chart_1m"
             }
             return market_data, whale_flow
         except Exception as e:
@@ -1153,21 +1404,72 @@ class TradingPlatformScheduler:
         except Exception:
             pass
 
-        # 2) Yahoo
+        # 2) Yahoo quote v7
         try:
             url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={y_symbol}"
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 async with session.get(url) as resp:
                     if resp.status != 200:
-                        return False
-                    data = await resp.json()
+                        data = None
+                    else:
+                        data = await resp.json()
+            if not data:
+                raise RuntimeError("quote_v7_unavailable")
             row = (((data or {}).get("quoteResponse") or {}).get("result") or [None])[0]
             if not row:
-                return False
+                raise RuntimeError("quote_v7_empty")
             price = float(row.get("regularMarketPrice") or 0.0)
             return price > 0
         except Exception:
+            pass
+
+        # 3) Yahoo chart v8 fallback（v7 在部分网络环境会 401）
+        try:
+            chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{y_symbol}?interval=1d&range=5d&includePrePost=false"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(chart_url) as resp:
+                    if resp.status != 200:
+                        return False
+                    data = await resp.json()
+            result = (((data or {}).get("chart") or {}).get("result") or [None])[0]
+            if not result:
+                return False
+            quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+            closes = list(quote.get("close") or [])
+            for c in closes:
+                if c is None:
+                    continue
+                if float(c) > 0:
+                    return True
             return False
+        except Exception:
+            return False
+
+    def _is_flat_position(self, symbol: str) -> bool:
+        """判断当前是否空仓。不存在持仓记录也视为0仓位。"""
+        pos = self.trading_engine.account.positions.get(symbol)
+        if not pos:
+            return True
+        return abs(float(getattr(pos, "quantity", 0.0) or 0.0)) < 1e-9
+
+    def _prune_d7_recommendations(self):
+        """清理推荐池：去重、移除已在股票池中的标的。"""
+        active = {s.upper() for s in self.state.active_stocks}
+        seen = set()
+        pruned = {"short": [], "mid": [], "long": []}
+        for bucket_name in ("short", "mid", "long"):
+            for item in self.state.d7_recommendations.get(bucket_name, []) or []:
+                sym = str(item.get("symbol", "")).upper().strip()
+                if not sym or sym in active or sym in seen:
+                    continue
+                seen.add(sym)
+                cp = dict(item)
+                cp["symbol"] = sym
+                cp["selected"] = False
+                pruned[bucket_name].append(cp)
+        self.state.d7_recommendations = pruned
 
     def add_stock(self, symbol: str):
         """手动添加股票"""
@@ -1176,6 +1478,7 @@ class TradingPlatformScheduler:
             self.state.active_stocks.append(symbol)
             self.stock_cases[symbol] = StockCase(symbol=symbol)
             self.state.progress["stocks"][symbol] = {}
+            self._prune_d7_recommendations()
             self.logger.info(f"Added stock: {symbol}")
             self._persist_runtime_state()
         return symbol
@@ -1246,15 +1549,17 @@ class TradingPlatformScheduler:
 
     def get_d7_recommendations(self) -> Dict[str, Any]:
         """获取D7推荐池（短/中/长）"""
+        self._prune_d7_recommendations()
         return self.state.d7_recommendations
 
     def select_d7_recommendation(self, symbol: str) -> bool:
         """从D7推荐中选中并加入交易池"""
+        symbol = self._normalize_symbol(symbol)
         for bucket in self.state.d7_recommendations.values():
             for item in bucket:
-                if item["symbol"].upper() == symbol.upper():
-                    self.add_stock(symbol.upper())
-                    item["selected"] = True
+                if str(item.get("symbol", "")).upper() == symbol:
+                    self.add_stock(symbol)
+                    self._prune_d7_recommendations()
                     self._persist_runtime_state()
                     return True
         return False
@@ -1276,6 +1581,14 @@ class TradingPlatformScheduler:
     def get_trade_history(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """获取交易历史"""
         return self.trading_engine.get_trade_history(symbol)
+
+    def get_portfolio_performance(self) -> Dict[str, Any]:
+        """获取组合收益指标（总收益/周/月/半年/年）。"""
+        return self.trading_engine.get_portfolio_performance()
+
+    def get_stock_performance(self, symbols: Optional[List[str]] = None) -> Dict[str, Any]:
+        """获取按股票收益指标（周/月/半年/年）。"""
+        return self.trading_engine.get_stock_performance(symbols)
 
     async def train_d5(self) -> Dict[str, Any]:
         """触发 D5 在线训练/校准"""
